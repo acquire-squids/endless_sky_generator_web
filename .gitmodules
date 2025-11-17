@@ -1,0 +1,3 @@
+[submodule "endless_sky_rw"]
+	path = endless_sky_rw
+	url = git@github.com:acquire-squids/endless_sky_rw.git
