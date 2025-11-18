@@ -32,7 +32,12 @@ const generateAndDownload = (fileName, rustFn) => {
       return;
     }
 
-    const zipBlob = new Blob(result);
+    const zipBlob = new Blob(
+      [result.buffer],
+      {
+        type: "application/zip"
+      }
+    );
 
     const blobUrl = URL.createObjectURL(zipBlob);
 
