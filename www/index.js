@@ -51,6 +51,6 @@ const generateAndDownload = (fileName, rustFn) => {
 
     URL.revokeObjectURL(blobUrl);
   }
-}
+};
 
 template_output.addEventListener("click", generateAndDownload("template_plugin.zip", generate_template));
