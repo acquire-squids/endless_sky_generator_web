@@ -1,33 +1,56 @@
-import init, { find_ships } from "./endless_sky_generator_web.js";
+import init, { generate_template } from "./endless_sky_generator_web.js";
 
 import { println, readFileAsText } from "./export_to_rust.js";
 
 const wasm = await init();
 
 const input = document.getElementById("input");
-const output = document.getElementById("output");
 const log = document.getElementById("log");
 
-output.addEventListener("click", async () => {
-  log.innerText = "";
+const template_output = document.getElementById("template-output");
 
-  const paths = [];
-  const sources = [];
+const generateAndDownload = (fileName, rustFn) => {
+  return async () => {
+    log.innerText = "";
 
-  for (const file of input.files) {
-    if (file.type.startsWith("text")) {
-      paths.push(file.name);
-      sources.push(await readFileAsText(file));
+    const paths = [];
+    const sources = [];
+
+    for (const file of input.files) {
+      if (file.type.startsWith("text")) {
+        paths.push(file.name);
+        sources.push(await readFileAsText(file));
+      }
     }
-  }
 
-  const result = find_ships(paths, sources);
+    let result;
 
-  if (result.errors.length === 0) {
-    for (const ship of result.text) {
-      println(ship);
+    try {
+      result = new Uint8Array(rustFn(paths, sources));
+    } catch(error) {
+      println("ERROR: " + error);
+      return;
     }
-  } else {
-    println(result.errors);
+
+    const zipBlob = new Blob(
+      [result.buffer],
+      {
+        type: "application/zip"
+      }
+    );
+
+    const blobUrl = URL.createObjectURL(zipBlob);
+
+    const downloadLink = document.createElement("a");
+
+    downloadLink.setAttribute("href", blobUrl);
+    downloadLink.setAttribute("download", fileName);
+    downloadLink.click();
+
+    downloadLink.remove();
+
+    URL.revokeObjectURL(blobUrl);
   }
-});
+}
+
+template_output.addEventListener("click", generateAndDownload("template_plugin.zip", generate_template));

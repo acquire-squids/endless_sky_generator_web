@@ -6,14 +6,30 @@
     <title>Endless Sky Generator</title>
   </head>
   <body>
+    <header>
+      <h1>Endless Sky Generator</h1>
+    </header>
     <div>
       <input id="input" type="file" webkitdirectory>Choose an Endless Sky data folder</input>
     </div>
     <div>
-      <p>After uploading your Endless Sky data folder, please wait warmly for generation to finish before you press the download button.</p>
+      <p>
+        After uploading your Endless Sky data folder,
+        click the download buttons for any plugins you may be interested in.
+      </p>
     </div>
     <div>
-      <input id="output" type="button" value="Download"></input>
+      <header>
+        <h2>Template Plugin</h2>
+        <p>
+          A template plugin made for testing this web generator.
+        </p>
+        <p>
+          The Rust code's kind of verbose, but that's okay.
+          I made it for myself to use and I like using it, and that's all that matters.
+        </p>
+      </header>
+      <input id="template-output" type="button" value="Download"></input>
     </div>
     <div>
       <pre id="log">No data folder selected</pre>
