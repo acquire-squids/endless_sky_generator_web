@@ -3,7 +3,7 @@ use endless_sky_rw::*;
 use std::io::{self, Write};
 
 use flate2::{Compression, write::DeflateEncoder};
-use rawzip::{self, CompressionMethod, ZipArchiveWriter, ZipLocator};
+use rawzip::{self, CompressionMethod, ZipArchiveWriter};
 use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "Plugin Template";
