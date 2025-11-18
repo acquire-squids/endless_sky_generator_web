@@ -26,8 +26,6 @@ pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, ra
 
     let mut archive = ZipArchiveWriter::new(io::Cursor::new(&mut output));
 
-    // println("ARCHIVE START");
-
     // `plugin.txt`:
     {
         let (mut entry, config) = archive
@@ -86,12 +84,8 @@ pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, ra
         let _compressed_len = entry.finish(descriptor)?;
     }
 
-    // println("plugin.txt DONE");
-
     // `data/`
     archive.new_dir("data/").create()?;
-
-    // println("data/ DONE");
 
     // `data/replace_with_plugin_data.txt`
     {
@@ -122,7 +116,7 @@ pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, ra
                     {
                         : "As soon as you land, you realize something is wrong.";
                         : "    You forgot to remove the example file from your template plugin!" ;
-                        : "    Everything goes dark, and you die" ;
+                        : "    Everything goes dark, and you die." ;
                         {
                             : "die" ;
                         }
@@ -153,26 +147,7 @@ pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, ra
         let _compressed_len = entry.finish(descriptor)?;
     }
 
-    // println("data/replace_with_plugin_data.txt DONE");
-
     archive.finish()?;
-
-    let locator = ZipLocator::new();
-
-    match locator.locate_in_slice(output.as_slice()) {
-        Ok(_archive) => {
-            // println(
-            //     format!(
-            //         "Found EOCD in slice, archive has {} files.",
-            //         _archive.entries_hint()
-            //     )
-            //     .as_str(),
-            // );
-        }
-        Err((_data, _e)) => {
-            // println(format!("Failed to locate EOCD in slice: {:?}", _e).as_str());
-        }
-    }
 
     Ok(output)
 }
