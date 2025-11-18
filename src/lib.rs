@@ -1,4 +1,5 @@
 mod template;
+mod wandom;
 
 use wasm_bindgen::prelude::*;
 
