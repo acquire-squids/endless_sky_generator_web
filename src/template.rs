@@ -1,9 +1,8 @@
+use crate::zippy::Zip;
 use endless_sky_rw::*;
 
-use std::io::{self, Write};
+use std::{error::Error, io};
 
-use flate2::{Compression, write::DeflateEncoder};
-use rawzip::{self, CompressionMethod, ZipArchiveWriter};
 use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "Plugin Template";
@@ -19,89 +18,70 @@ extern "C" {
     fn println(text: &str);
 }
 
-pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, rawzip::Error> {
-    let mut data = Data::default();
+pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut output_data = Data::default();
 
     let mut output = vec![];
 
-    let mut archive = ZipArchiveWriter::new(io::Cursor::new(&mut output));
+    let mut archive = Zip::new(&mut output);
 
-    // `plugin.txt`:
     {
-        let (mut entry, config) = archive
-            .new_file("plugin.txt")
-            .compression_method(CompressionMethod::Deflate)
-            .start()?;
-
-        let encoder = DeflateEncoder::new(&mut entry, Compression::default());
-
-        let mut writer = config.wrap(encoder);
-
-        let plugin_txt_source = data.insert_source(String::new());
+        let output_root_node_count = output_data.root_nodes().len();
+        let plugin_txt_source = output_data.insert_source(String::new());
 
         let plugin_name = tree_from_tokens!(
-            &mut data; plugin_txt_source =>
+            &mut output_data; plugin_txt_source =>
             : "name", PLUGIN_NAME ;
         );
 
-        data.push_root_node(plugin_txt_source, plugin_name);
+        output_data.push_root_node(plugin_txt_source, plugin_name);
 
         let mut plugin_description = vec![];
 
-        for about in PLUGIN_DESCRIPTION.lines() {
+        for about in PLUGIN_DESCRIPTION.lines().map(|t| t.trim()) {
             let plugin_about = tree_from_tokens!(
-                &mut data; plugin_txt_source =>
+                &mut output_data; plugin_txt_source =>
                 : "about", about ;
             );
 
             plugin_description.push(plugin_about);
 
-            data.push_root_node(plugin_txt_source, plugin_about);
+            output_data.push_root_node(plugin_txt_source, plugin_about);
         }
 
         let plugin_version = tree_from_tokens!(
-            &mut data; plugin_txt_source =>
+            &mut output_data; plugin_txt_source =>
             : "version", PLUGIN_VERSION ;
         );
 
-        data.push_root_node(plugin_txt_source, plugin_version);
+        output_data.push_root_node(plugin_txt_source, plugin_version);
 
         let mut plugin_txt = String::new();
+        let plugin_path = "plugin.txt";
 
-        if data
-            .write(&mut plugin_txt, plugin_txt_source, plugin_name, 0)
+        if output_data
+            .write_root_nodes(
+                &mut plugin_txt,
+                &output_data.root_nodes()[output_root_node_count..],
+            )
             .is_err()
         {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::IO(
-                io::Error::other("Failed to write `plugin.txt` to string :("),
-            )));
+            return Err(Box::new(io::Error::other(format!(
+                "Failed to write `{plugin_path}` to string :("
+            ))));
         }
 
-        writer.write_all(plugin_txt.as_bytes())?;
-
-        let (_, descriptor) = writer.finish()?;
-
-        let _compressed_len = entry.finish(descriptor)?;
+        archive.write_file(plugin_path, plugin_txt.trim().as_bytes())?;
     }
 
-    // `data/`
-    archive.new_dir("data/").create()?;
+    archive.write_dir("data/")?;
 
-    // `data/replace_with_plugin_data.txt`
     {
-        let (mut entry, config) = archive
-            .new_file("data/replace_with_plugin_data.txt")
-            .compression_method(CompressionMethod::Deflate)
-            .start()?;
+        let output_root_node_count = output_data.root_nodes().len();
+        let mission_txt_source = output_data.insert_source(String::new());
 
-        let encoder = DeflateEncoder::new(&mut entry, Compression::default());
-
-        let mut writer = config.wrap(encoder);
-
-        let example_txt_source = data.insert_source(String::new());
-
-        let example_mission = tree_from_tokens!(
-            &mut data; example_txt_source =>
+        let mission = tree_from_tokens!(
+            &mut output_data; mission_txt_source =>
             : "mission", format!("{PLUGIN_NAME}: forgot to remove example file") ;
             {
                 : "name", "YOU FORGOT SOMETHING" ;
@@ -125,26 +105,24 @@ pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, ra
             }
         );
 
-        data.push_root_node(example_txt_source, example_mission);
+        output_data.push_root_node(mission_txt_source, mission);
 
-        let mut example_txt = String::new();
+        let mut mission_txt = String::new();
+        let mission_path = "data/replace_with_plugin_data.txt";
 
-        if data
-            .write(&mut example_txt, example_txt_source, example_mission, 0)
+        if output_data
+            .write_root_nodes(
+                &mut mission_txt,
+                &output_data.root_nodes()[output_root_node_count..],
+            )
             .is_err()
         {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::IO(
-                io::Error::other(
-                    "Failed to write `data/replace_with_plugin_data.txt` to string :(",
-                ),
-            )));
+            return Err(Box::new(io::Error::other(format!(
+                "Failed to write `{mission_path}` to string :("
+            ))));
         }
 
-        writer.write_all(example_txt.as_bytes())?;
-
-        let (_, descriptor) = writer.finish()?;
-
-        let _compressed_len = entry.finish(descriptor)?;
+        archive.write_file(mission_path, mission_txt.trim().as_bytes())?;
     }
 
     archive.finish()?;

@@ -1,9 +1,8 @@
+use crate::zippy::Zip;
 use endless_sky_rw::*;
 
-use std::io::{self, Write};
+use std::{error::Error, io};
 
-use flate2::{Compression, write::DeflateEncoder};
-use rawzip::{self, CompressionMethod, ZipArchiveWriter};
 use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "Full Map";
@@ -13,36 +12,6 @@ const PLUGIN_DESCRIPTION: &str = "\
 ";
 
 const PLUGIN_VERSION: &str = "0.1.0";
-
-type ZipBytes<'a> = ZipArchiveWriter<io::Cursor<&'a mut Vec<u8>>>;
-
-fn write_file_to_zip<'a>(
-    archive: &mut ZipBytes<'a>,
-    path: &str,
-    bytes: &[u8],
-) -> Result<(), rawzip::Error> {
-    let (mut entry, config) = archive
-        .new_file(path)
-        .compression_method(CompressionMethod::Deflate)
-        .start()?;
-
-    let encoder = DeflateEncoder::new(&mut entry, Compression::default());
-
-    let mut writer = config.wrap(encoder);
-
-    writer.write_all(bytes)?;
-
-    let (_, descriptor) = writer.finish()?;
-
-    let _compressed_len = entry.finish(descriptor)?;
-
-    Ok(())
-}
-
-fn write_dir_to_zip<'a>(archive: &mut ZipBytes<'a>, path: &str) -> Result<(), rawzip::Error> {
-    archive.new_dir(path).create()?;
-    Ok(())
-}
 
 #[wasm_bindgen(module = "/www/export_to_rust.js")]
 extern "C" {
@@ -67,13 +36,11 @@ fn find_named_objects<'a>(
     }
 }
 
-pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawzip::Error> {
+pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<dyn Error>> {
     let data_folder = match read_upload(paths, sources) {
         Some((data_folder, errors)) => {
             if !errors.is_empty() {
-                let error_string = String::from_utf8(errors).map_err(|utf8_error| {
-                    rawzip::Error::from(rawzip::ErrorKind::InvalidUtf8(utf8_error.utf8_error()))
-                })?;
+                let error_string = String::from_utf8(errors)?;
 
                 println(error_string.as_str());
             }
@@ -81,7 +48,7 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
             data_folder
         }
         None => {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::InvalidInput { msg: "ERROR: Somehow, everything went wrong while reading the data folder.  You're on your own.".to_owned() }));
+            return Err(Box::new(rawzip::Error::from(rawzip::ErrorKind::InvalidInput { msg: "ERROR: Somehow, everything went wrong while reading the data folder.  You're on your own.".to_owned() })));
         }
     };
 
@@ -91,10 +58,10 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
 
     let mut output = vec![];
 
-    let mut archive = ZipArchiveWriter::new(io::Cursor::new(&mut output));
+    let mut archive = Zip::new(&mut output);
 
-    // `plugin.txt`:
     {
+        let output_root_node_count = output_data.root_nodes().len();
         let plugin_txt_source = output_data.insert_source(String::new());
 
         let plugin_name = tree_from_tokens!(
@@ -106,7 +73,7 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
 
         let mut plugin_description = vec![];
 
-        for about in PLUGIN_DESCRIPTION.lines() {
+        for about in PLUGIN_DESCRIPTION.lines().map(|t| t.trim()) {
             let plugin_about = tree_from_tokens!(
                 &mut output_data; plugin_txt_source =>
                 : "about", about ;
@@ -125,32 +92,27 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
         output_data.push_root_node(plugin_txt_source, plugin_version);
 
         let mut plugin_txt = String::new();
+        let plugin_path = "plugin.txt";
 
         if output_data
-            .write(&mut plugin_txt, plugin_txt_source, plugin_name, 0)
+            .write_root_nodes(
+                &mut plugin_txt,
+                &output_data.root_nodes()[output_root_node_count..],
+            )
             .is_err()
-            || plugin_description.into_iter().any(|n| {
-                output_data
-                    .write(&mut plugin_txt, plugin_txt_source, n, 0)
-                    .is_err()
-            })
-            || output_data
-                .write(&mut plugin_txt, plugin_txt_source, plugin_version, 0)
-                .is_err()
         {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::IO(
-                io::Error::other("Failed to write `plugin.txt` to string :("),
-            )));
+            return Err(Box::new(io::Error::other(format!(
+                "Failed to write `{plugin_path}` to string :("
+            ))));
         }
 
-        write_file_to_zip(&mut archive, "plugin.txt", plugin_txt.as_bytes())?;
+        archive.write_file(plugin_path, plugin_txt.trim().as_bytes())?;
     }
 
-    // `data/`
-    write_dir_to_zip(&mut archive, "data/")?;
+    archive.write_dir("data/")?;
 
-    // `data/full_map_mission.txt`
     {
+        let output_root_node_count = output_data.root_nodes().len();
         let mission_txt_source = output_data.insert_source(String::new());
 
         let mission = tree_from_tokens!(
@@ -172,25 +134,25 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
         output_data.push_root_node(mission_txt_source, mission);
 
         let mut mission_txt = String::new();
+        let mission_path = "data/full_map_mission.txt";
 
         if output_data
-            .write(&mut mission_txt, mission_txt_source, mission, 0)
+            .write_root_nodes(
+                &mut mission_txt,
+                &output_data.root_nodes()[output_root_node_count..],
+            )
             .is_err()
         {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::IO(
-                io::Error::other("Failed to write `data/full_map_mission.txt` to string :("),
-            )));
+            return Err(Box::new(io::Error::other(format!(
+                "Failed to write `{mission_path}` to string :("
+            ))));
         }
 
-        write_file_to_zip(
-            &mut archive,
-            "data/full_map_mission.txt",
-            mission_txt.as_bytes(),
-        )?;
+        archive.write_file(mission_path, mission_txt.trim().as_bytes())?;
     }
 
-    // `data/full_map_event.txt`
     {
+        let output_root_node_count = output_data.root_nodes().len();
         let event_txt_source = output_data.insert_source(String::new());
 
         let event = tree_from_tokens!(
@@ -227,21 +189,21 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, rawz
         output_data.push_root_node(event_txt_source, event);
 
         let mut event_txt = String::new();
+        let event_path = "data/full_map_event.txt";
 
         if output_data
-            .write(&mut event_txt, event_txt_source, event, 0)
+            .write_root_nodes(
+                &mut event_txt,
+                &output_data.root_nodes()[output_root_node_count..],
+            )
             .is_err()
         {
-            return Err(rawzip::Error::from(rawzip::ErrorKind::IO(
-                io::Error::other("Failed to write `data/full_map_event.txt` to string :("),
-            )));
+            return Err(Box::new(io::Error::other(format!(
+                "Failed to write `{event_path}` to string :("
+            ))));
         }
 
-        write_file_to_zip(
-            &mut archive,
-            "data/full_map_event.txt",
-            event_txt.as_bytes(),
-        )?;
+        archive.write_file(event_path, event_txt.trim().as_bytes())?;
     }
 
     archive.finish()?;

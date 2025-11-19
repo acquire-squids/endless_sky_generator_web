@@ -1,6 +1,7 @@
 mod full_map;
 mod template;
 mod wandom;
+mod zippy;
 
 use wasm_bindgen::prelude::*;
 
