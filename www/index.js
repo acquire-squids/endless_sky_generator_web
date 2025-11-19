@@ -1,4 +1,9 @@
-import init, { generate_template } from "./endless_sky_generator_web.js";
+import init from "./endless_sky_generator_web.js";
+
+import {
+  generate_template,
+  generate_full_map
+} from "./endless_sky_generator_web.js";
 
 import { println, readFileAsText } from "./export_to_rust.js";
 
@@ -8,6 +13,7 @@ const input = document.getElementById("input");
 const log = document.getElementById("log");
 
 const template_output = document.getElementById("template-output");
+const full_map_output = document.getElementById("full-map-output");
 
 const generateAndDownload = (fileName, rustFn) => {
   return async () => {
@@ -54,3 +60,4 @@ const generateAndDownload = (fileName, rustFn) => {
 };
 
 template_output.addEventListener("click", generateAndDownload("template_plugin.zip", generate_template));
+full_map_output.addEventListener("click", generateAndDownload("full_map.zip", generate_full_map));
