@@ -1,4 +1,5 @@
 mod full_map;
+mod import_from_javascript;
 mod template;
 mod wandom;
 mod zippy;

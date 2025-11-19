@@ -1,9 +1,8 @@
+use crate::import_from_javascript;
 use crate::zippy::Zip;
 use endless_sky_rw::*;
 
 use std::{error::Error, io};
-
-use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "Full Map";
 
@@ -12,11 +11,6 @@ const PLUGIN_DESCRIPTION: &str = "\
 ";
 
 const PLUGIN_VERSION: &str = "0.1.0";
-
-#[wasm_bindgen(module = "/www/export_to_rust.js")]
-extern "C" {
-    fn println(text: &str);
-}
 
 fn find_named_objects<'a>(
     data: &'a Data,
@@ -42,7 +36,7 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
             if !errors.is_empty() {
                 let error_string = String::from_utf8(errors)?;
 
-                println(error_string.as_str());
+                import_from_javascript::println(error_string.as_str());
             }
 
             data_folder

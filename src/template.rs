@@ -3,8 +3,6 @@ use endless_sky_rw::*;
 
 use std::{error::Error, io};
 
-use wasm_bindgen::prelude::*;
-
 const PLUGIN_NAME: &str = "Plugin Template";
 
 const PLUGIN_DESCRIPTION: &str = "\
@@ -12,11 +10,6 @@ const PLUGIN_DESCRIPTION: &str = "\
 ";
 
 const PLUGIN_VERSION: &str = "0.1.0";
-
-#[wasm_bindgen(module = "/www/export_to_rust.js")]
-extern "C" {
-    fn println(text: &str);
-}
 
 pub fn process(_paths: Vec<String>, _sources: Vec<String>) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut output_data = Data::default();
