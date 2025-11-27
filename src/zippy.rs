@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     io::{self, Write},
+    path::PathBuf,
 };
 
 use flate2::{Compression, write::DeflateEncoder};
@@ -19,10 +20,16 @@ impl<'a> Zip<'a> {
         }
     }
 
-    pub fn write_file(&mut self, path: &str, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn write_file<P: Into<PathBuf>>(
+        &mut self,
+        path: P,
+        bytes: &[u8],
+    ) -> Result<(), Box<dyn Error>> {
+        let path = P::into(path).display().to_string();
+
         let (mut entry, config) = self
             .writer
-            .new_file(path)
+            .new_file(path.as_str())
             .compression_method(CompressionMethod::Deflate)
             .start()?;
 
@@ -39,8 +46,9 @@ impl<'a> Zip<'a> {
         Ok(())
     }
 
-    pub fn write_dir(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
-        self.writer.new_dir(path).create()?;
+    pub fn write_dir<P: Into<PathBuf>>(&mut self, path: P) -> Result<(), Box<dyn Error>> {
+        let path = P::into(path).display().to_string();
+        self.writer.new_dir(path.as_str()).create()?;
         Ok(())
     }
 
