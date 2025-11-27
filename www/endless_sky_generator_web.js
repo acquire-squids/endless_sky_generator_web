@@ -161,6 +161,66 @@ export function generate_template(paths, sources) {
     return v3;
 }
 
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
+}
+/**
+ * @param {string[]} paths
+ * @param {string[]} sources
+ * @param {SystemShufflerConfig} settings
+ * @returns {Uint8Array}
+ */
+export function generate_system_shuffler(paths, sources, settings) {
+    const ptr0 = passArrayJsValueToWasm0(paths, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(sources, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    _assertClass(settings, SystemShufflerConfig);
+    var ptr2 = settings.__destroy_into_raw();
+    const ret = wasm.generate_system_shuffler(ptr0, len0, ptr1, len1, ptr2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+const SystemShufflerConfigFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_systemshufflerconfig_free(ptr >>> 0, 1));
+
+export class SystemShufflerConfig {
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        SystemShufflerConfigFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_systemshufflerconfig_free(ptr, 0);
+    }
+    /**
+     * @param {number} seed
+     * @param {number} max_presets
+     * @param {number} shuffle_chance
+     * @param {number} fixed_shuffle_days
+     * @param {boolean} shuffle_once_on_install
+     */
+    constructor(seed, max_presets, shuffle_chance, fixed_shuffle_days, shuffle_once_on_install) {
+        const ret = wasm.systemshufflerconfig_new(seed, max_presets, shuffle_chance, fixed_shuffle_days, shuffle_once_on_install);
+        this.__wbg_ptr = ret >>> 0;
+        SystemShufflerConfigFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) SystemShufflerConfig.prototype[Symbol.dispose] = SystemShufflerConfig.prototype.free;
+
 const EXPECTED_RESPONSE_TYPES = new Set(['basic', 'cors', 'default']);
 
 async function __wbg_load(module, imports) {

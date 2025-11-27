@@ -39,6 +39,47 @@
       </p>
       <input id="full-map-output" type="button" value="Download"></input>
     </div>
+    <div>
+      <header>
+        <h2>System Shuffler</h2>
+      </header>
+      <p>
+        A plugin that comes with preset randomizations of every system in the universe.<br/><br/>
+        It will swap system positions but keep the shape and traversability of the universe the same.<br/>
+        <!-- Due to Pug magic, system objects (planets, stars, hazards, etc.) will keep their absolute position in the universe by moving to a new system.<br/>--><br/>
+        Using the inputs below, you can configure the plugin to shuffle the universe into a random preset on certain conditions:
+        <ul>
+          <li>Once, immediately, upon installation</li>
+          <li>With a percentage chance every time you land</li>
+          <li>Every N days, with the shuffle happening after a greater amount of time if you have not landed for N days</li>
+        </ul>
+        Additionally, you can request a shuffle or restore at any point through any job board.<br/><br/>
+        <b>Be wary of repeated shuffling!</b>  If your version of Endless Sky copies the whole event definition into your save each time it triggers (this is the default as of 0.10.16), <b>your save file has potential to explode in size!</b>
+      </p>
+      <div>
+        <label>seed:</label>
+        <input id="system-shuffler-seed" type="number" value=0></input>
+      </div>
+      <div>
+        <label>max presets:</label>
+        <input id="system-shuffler-max-presets" type="number" value=1 min=1 max=255></input>
+      </div>
+      <div>
+        <label>shuffle once upon installation:</label>
+        <input id="system-shuffler-shuffle-once-on-install" type="checkbox"></input>
+      </div>
+      <div>
+        <label>chance to shuffle every time you land:</label>
+        <input id="system-shuffler-shuffle-chance" type="range" value=0 min=0 max=100></input>
+        <input id="system-shuffler-shuffle-chance-output" type="number" value=0 min=0 max=100></input>
+      </div>
+      <div>
+        <label>shuffle every N days (0 to disable):</label>
+        <input id="system-shuffler-fixed-shuffle-days" type="range" value=0 min=0 max=255></input>
+        <input id="system-shuffler-fixed-shuffle-days-output" type="number" value=0 min=0 max=255></input>
+      </div>
+      <input id="system-shuffler-output" type="button" value="Download"></input>
+    </div>
     <script type="module" src="./index.js"></script>
   </body>
 </html>
