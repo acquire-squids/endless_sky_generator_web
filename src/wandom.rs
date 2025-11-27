@@ -12,7 +12,7 @@ impl<T> ShuffleIndex for Vec<T> {
 
         for i in (1..(self.len())).rev() {
             let j = rng.rand_range(0, (i as u64) + 1);
-            indices.swap(i, j as usize);
+            indices.swap(j as usize, i);
         }
 
         indices
@@ -58,23 +58,21 @@ impl XoShiRo256SS {
         }
 
         if let Some(num_range) = maximum.checked_sub(minimum) {
-            if let Some(bits) = num_range.checked_ilog2() {
-                if bits < 64 {
-                    let mut num = self.step() % 1u64.wrapping_shl(bits);
+            let bits = num_range.checked_ilog2().unwrap_or_default() + 1;
 
-                    while num >= num_range {
-                        num = self.step() % 1u64.wrapping_shl(bits);
-                    }
+            if bits < 64 {
+                let mut num = self.step() % 1u64.wrapping_shl(bits);
 
-                    num + minimum
-                } else {
-                    self.step()
+                while num >= num_range {
+                    num = self.step() % 1u64.wrapping_shl(bits);
                 }
+
+                num + minimum
             } else {
-                minimum
+                self.step()
             }
         } else {
-            self.rand_range(maximum, minimum)
+            minimum
         }
     }
 }
