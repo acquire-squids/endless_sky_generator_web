@@ -31,12 +31,12 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install wasm32-unknown-unknown target
-      id: install wasm target from rustup
+      id: install_wasm_target
       if: steps.cache.outputs.cache-hit != 'true'
       run: rustup target add wasm32-unknown-unknown
         
     - name: Install wasm-bindgen
-      id: install wasm-bindgen from cargo
+      id: install_wasm_bindgen
       if: steps.cache.outputs.cache-hit != 'true'
       run: cargo install --version =0.2.105 wasm-bindgen-cli
       
