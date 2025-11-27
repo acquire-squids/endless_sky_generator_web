@@ -89,8 +89,6 @@ full_map_output.addEventListener("click", generateAndDownload("full_map.zip", ge
   share_value(fixed_shuffle_days_output, fixed_shuffle_days);
 
   output.addEventListener("click", async () => {
-    log.innerText = "";
-
     let errored = false;
 
     if (!seed.checkValidity()) {
