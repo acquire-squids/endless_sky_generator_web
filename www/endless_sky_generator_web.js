@@ -1,5 +1,3 @@
-import { println } from './snippets/endless_sky_generator_web-b4301c8343cf03f3/www/export_to_rust.js';
-
 let wasm;
 
 let WASM_VECTOR_LEN = 0;
@@ -212,8 +210,8 @@ function __wbg_get_imports() {
     imports.wbg.__wbg___wbindgen_throw_b855445ff6a94295 = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbg_println_0ba6b75baab99283 = function(arg0, arg1) {
-        println(getStringFromWasm0(arg0, arg1));
+    imports.wbg.__wbg_error_bc7b0402f3d1882c = function(arg0, arg1) {
+        console.error(getStringFromWasm0(arg0, arg1));
     };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.

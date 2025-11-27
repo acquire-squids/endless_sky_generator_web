@@ -36,7 +36,7 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
             if !errors.is_empty() {
                 let error_string = String::from_utf8(errors)?;
 
-                import_from_javascript::println(error_string.as_str());
+                import_from_javascript::error(error_string.as_str());
             }
 
             data_folder

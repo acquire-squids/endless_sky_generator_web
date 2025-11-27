@@ -5,20 +5,17 @@ import {
   generate_full_map
 } from "./endless_sky_generator_web.js";
 
-import { println, readFileAsText } from "./export_to_rust.js";
+import { readFileAsText } from "./export_to_rust.js";
 
 const wasm = await init();
 
 const input = document.getElementById("input");
-const log = document.getElementById("log");
 
 const template_output = document.getElementById("template-output");
 const full_map_output = document.getElementById("full-map-output");
 
 const generateAndDownload = (fileName, rustFn) => {
   return async () => {
-    log.innerText = "";
-
     const paths = [];
     const sources = [];
 
@@ -34,7 +31,7 @@ const generateAndDownload = (fileName, rustFn) => {
     try {
       result = new Uint8Array(rustFn(paths, sources));
     } catch(error) {
-      println("ERROR: " + error);
+      console.error(error);
       return;
     }
 
