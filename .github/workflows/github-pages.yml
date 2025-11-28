@@ -39,6 +39,15 @@ jobs:
       id: install_wasm_bindgen
       if: steps.cache.outputs.cache-hit != 'true'
       run: cargo install --version =0.2.105 wasm-bindgen-cli
+
+    - name: Set RUSTFLAGS
+      id: rustflags
+      run: export RUSTFLAGS="-Dwarnings"
+
+    - name: Cargo clippy
+      id: cargo_clippy
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: cargo clippy --release
       
     - name: Build
       id: build
@@ -61,6 +70,8 @@ jobs:
         path: www/
 
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    
     permissions:
       contents: read
       pages: write
