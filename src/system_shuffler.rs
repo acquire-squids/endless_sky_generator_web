@@ -4,6 +4,7 @@ use crate::zippy::Zip;
 use endless_sky_rw::*;
 
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
     io,
@@ -14,7 +15,14 @@ use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "System Shuffler";
 
-const PLUGIN_VERSION: &str = "0.3.8";
+const PLUGIN_VERSION: &str = "0.4.0";
+
+const INSTALLED: &str = "System Shuffler: Installed";
+const CURRENT_PRESET: &str = "System Shuffler: Current Preset";
+const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle";
+
+const RESTORE_PREFIX: &str = "System Shuffler: Restore Preset";
+const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
@@ -228,44 +236,35 @@ pub fn process(
         )?;
     }
 
-    let mut shuffle_storage = Data::default();
-
-    let shuffle_storage_source = shuffle_storage.insert_source(String::new());
-
     let mut system_names = HashSet::new();
 
-    let mut persistent_system_nodes = HashMap::new();
+    let mut persistent_nodes = HashMap::new();
 
     let mut planets = HashMap::new();
     let mut wormholes = HashSet::new();
 
     find_wormholes_from_planets(data, &mut wormholes);
 
-    data_from_system(
+    data_from_node(
         data,
-        node_path_iter!(&data; "system").chain(node_path_iter!(&data; "wormhole")),
+        node_path_iter!(&data; "system" | "wormhole"),
         &mut system_names,
         (&mut planets, &mut wormholes),
-        &mut shuffle_storage,
-        shuffle_storage_source,
-        &mut persistent_system_nodes,
+        &mut persistent_nodes,
     );
 
-    let mut persistent_event_system_nodes = HashMap::new();
+    let mut persistent_event_nodes = HashMap::new();
 
     for (source_index, node_index) in
-        node_path_iter!(&data; "event").filter(|(source_index, node_index)| {
-            data.get_tokens(*node_index).unwrap_or_default().len() >= 2
+        node_path_iter!(&data; "event").filter(|&(source_index, node_index)| {
+            data.get_tokens(node_index).unwrap_or_default().len() >= 2
                 && !data
-                    .get_children(*node_index)
+                    .get_children(node_index)
                     .unwrap_or_default()
                     .is_empty()
-                && (node_path_iter!(&data => (*source_index, *node_index); "system")
+                && node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
                     .next()
                     .is_some()
-                    || node_path_iter!(&data => (*source_index, *node_index); "wormhole")
-                        .next()
-                        .is_some())
         })
     {
         let event_name = data
@@ -275,20 +274,17 @@ pub fn process(
 
         let mut event_map = HashMap::new();
 
-        data_from_system(
+        data_from_node(
             data,
-            node_path_iter!(&data => (source_index, node_index); "system")
-                .chain(node_path_iter!(&data => (source_index, node_index); "wormhole"))
+            node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
                 .map(|n| (source_index, n)),
             &mut system_names,
             (&mut planets, &mut wormholes),
-            &mut shuffle_storage,
-            shuffle_storage_source,
             &mut event_map,
         );
 
         if !event_map.is_empty() {
-            persistent_event_system_nodes.insert(event_name, event_map);
+            persistent_event_nodes.insert(event_name, event_map);
         }
     }
 
@@ -296,12 +292,9 @@ pub fn process(
 
     system_names.sort();
 
-    let installed = "System Shuffler: Installed";
-    let current_preset = "System Shuffler: Current Preset";
-    let last_shuffle_day = "System Shuffler: Last Shuffle";
+    let mut persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
 
-    let restore_prefix = "System Shuffler: Restore Preset";
-    let activate_prefix = "System Shuffler: Activate Preset";
+    persistent_event_node_keys.sort();
 
     archive.write_dir("data/")?;
 
@@ -362,7 +355,7 @@ pub fn process(
                 if settings.fixed_shuffle_days > 0 {
                     let guaranteed = tree_from_tokens!(
                         &mut output_data; main_mission_source =>
-                        : "days since epoch", ">=", "(", last_shuffle_day, "+", settings.fixed_shuffle_days, ")" ;
+                        : "days since epoch", ">=", "(", LAST_SHUFFLE_DAY, "+", settings.fixed_shuffle_days, ")" ;
                     );
 
                     output_data.push_child(main_mission_to_offer_or, guaranteed);
@@ -371,7 +364,7 @@ pub fn process(
                 if settings.shuffle_once_on_install {
                     let first_time = tree_from_tokens!(
                         &mut output_data; main_mission_source =>
-                        : "not", installed ;
+                        : "not", INSTALLED ;
                     );
 
                     output_data.push_child(main_mission_to_offer_or, first_time);
@@ -399,18 +392,17 @@ pub fn process(
                 &settings,
                 &mut output_data,
                 (main_mission_source, main_mission_conversation),
-                current_preset,
-                restore_prefix,
-                "restore",
+                (false, RESTORE_PREFIX, "restore"),
+                persistent_event_node_keys.as_slice(),
             );
 
             let preset_selection = tree_from_tokens!(
                 &mut output_data; main_mission_source =>
                 : "action" ;
                 {
-                    : installed, "=", "1" ;
-                    : current_preset, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
-                    : last_shuffle_day, "=", "days since epoch" ;
+                    : INSTALLED, "=", "1" ;
+                    : CURRENT_PRESET, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
+                    : RESTORE_PREFIX, "=", "days since epoch" ;
                 }
             );
 
@@ -420,9 +412,8 @@ pub fn process(
                 &settings,
                 &mut output_data,
                 (main_mission_source, main_mission_conversation),
-                current_preset,
-                activate_prefix,
-                "activate",
+                (true, ACTIVATE_PREFIX, "activate"),
+                persistent_event_node_keys.as_slice(),
             );
 
             let main_failure = tree_from_tokens!(
@@ -453,7 +444,7 @@ pub fn process(
                 &mut output_data; restore_job_source =>
                 : "to", "offer" ;
                 {
-                    : current_preset, "!=", "0" ;
+                    : CURRENT_PRESET, "!=", "0" ;
                 }
             );
 
@@ -480,19 +471,17 @@ pub fn process(
                 &settings,
                 &mut output_data,
                 (restore_job_source, restore_job_conversation),
-                current_preset,
-                restore_prefix,
-                "restore",
+                (false, RESTORE_PREFIX, "restore"),
+                persistent_event_node_keys.as_slice(),
             );
 
             let preset_selection = tree_from_tokens!(
                 &mut output_data; restore_job_source =>
                 : "action" ;
                 {
-                    : current_preset, "=", "0" ;
-                    : last_shuffle_day, "=", "days since epoch" ;
-                    : "event", format!("wormhole: {activate_prefix} 0").as_str(), "0" ;
-                    : "event", format!("system: {activate_prefix} 0").as_str(), "0" ;
+                    : CURRENT_PRESET, "=", "0" ;
+                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
+                    : "event", format!("{ACTIVATE_PREFIX} 0").as_str(), "0" ;
                 }
             );
 
@@ -543,18 +532,17 @@ pub fn process(
                 &settings,
                 &mut output_data,
                 (manual_job_source, manual_job_conversation),
-                current_preset,
-                restore_prefix,
-                "restore",
+                (false, RESTORE_PREFIX, "restore"),
+                persistent_event_node_keys.as_slice(),
             );
 
             let preset_selection = tree_from_tokens!(
                 &mut output_data; manual_job_source =>
                 : "action" ;
                 {
-                    : installed, "=", "1" ;
-                    : current_preset, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
-                    : last_shuffle_day, "=", "days since epoch" ;
+                    : INSTALLED, "=", "1" ;
+                    : CURRENT_PRESET, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
+                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
                 }
             );
 
@@ -564,9 +552,8 @@ pub fn process(
                 &settings,
                 &mut output_data,
                 (manual_job_source, manual_job_conversation),
-                current_preset,
-                activate_prefix,
-                "activate",
+                (true, ACTIVATE_PREFIX, "activate"),
+                persistent_event_node_keys.as_slice(),
             );
 
             let main_failure = tree_from_tokens!(
@@ -614,58 +601,34 @@ pub fn process(
 
         archive.write_dir(format!("{preset_path}/"))?;
 
-        let restore_name = format!("{restore_prefix} {preset_index}");
-        let activate_name = format!("{activate_prefix} {preset_index}");
+        let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
+        let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
 
         {
             let output_root_node_count = output_data.root_nodes().len();
 
-            for original_kind in ["wormhole", "system"] {
-                if !persistent_system_nodes
-                    .keys()
-                    .any(|&(node_kind, _)| node_kind == original_kind)
-                {
-                    continue;
-                }
+            let shuffle_event_restore = tree_from_tokens!(
+                &mut output_data; shuffle_event_source =>
+                : "event", restore_name.as_str() ;
+            );
 
-                let shuffle_event_restore = tree_from_tokens!(
-                    &mut output_data; shuffle_event_source =>
-                    : "event", format!("{original_kind}: {}", restore_name.as_str()) ;
-                );
+            output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
 
-                output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
+            let shuffle_event_activate = tree_from_tokens!(
+                &mut output_data; shuffle_event_source =>
+                : "event", activate_name.as_str() ;
+            );
 
-                let shuffle_event_activate = tree_from_tokens!(
-                    &mut output_data; shuffle_event_source =>
-                    : "event", format!("{original_kind}: {}", activate_name.as_str()) ;
-                );
+            output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
 
-                output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
-
-                for &(_, original) in persistent_system_nodes
-                    .keys()
-                    .filter(|&&(node_kind, _)| node_kind == original_kind)
-                {
-                    let replacement = if original_kind == "system" {
-                        *system_swaps.get(original).unwrap()
-                    } else {
-                        original
-                    };
-
-                    let (removal, addition) = modify_node(
-                        (original_kind, original, replacement),
-                        &shuffle_storage,
-                        shuffle_storage_source,
-                        &mut output_data,
-                        shuffle_event_source,
-                        &system_swaps,
-                        &persistent_system_nodes,
-                    );
-
-                    output_data.push_child(shuffle_event_restore, removal);
-                    output_data.push_child(shuffle_event_activate, addition);
-                }
-            }
+            generate_event(
+                data,
+                &mut output_data,
+                shuffle_event_source,
+                (shuffle_event_restore, shuffle_event_activate),
+                &system_swaps,
+                &persistent_nodes,
+            );
 
             zip_root_nodes(
                 &mut archive,
@@ -678,53 +641,33 @@ pub fn process(
         {
             let output_root_node_count = output_data.root_nodes().len();
 
-            for (&event_name, event_map) in persistent_event_system_nodes.iter() {
-                for original_kind in ["wormhole", "system"] {
-                    if !event_map
-                        .keys()
-                        .any(|&(node_kind, _)| node_kind == original_kind)
-                    {
-                        continue;
-                    }
+            for (event_name, event_map) in persistent_event_node_keys
+                .as_slice()
+                .iter()
+                .map(|&e| (e, persistent_event_nodes.get(e).unwrap()))
+            {
+                let shuffle_event_restore = tree_from_tokens!(
+                    &mut output_data; shuffle_event_source =>
+                    : "event", format!("{restore_name}: {event_name}") ;
+                );
 
-                    let shuffle_event_restore = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "event", format!("{original_kind}: {}: {event_name}", restore_name.as_str()) ;
-                    );
+                output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
 
-                    output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
+                let shuffle_event_activate = tree_from_tokens!(
+                    &mut output_data; shuffle_event_source =>
+                    : "event", format!("{activate_name}: {event_name}") ;
+                );
 
-                    let shuffle_event_activate = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "event", format!("{original_kind}: {}: {event_name}", activate_name.as_str()) ;
-                    );
+                output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
 
-                    output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
-
-                    for &(_, original) in event_map
-                        .keys()
-                        .filter(|&&(node_kind, _)| node_kind == original_kind)
-                    {
-                        let replacement = if original_kind == "system" {
-                            *system_swaps.get(original).unwrap()
-                        } else {
-                            original
-                        };
-
-                        let (removal, addition) = modify_node(
-                            (original_kind, original, replacement),
-                            &shuffle_storage,
-                            shuffle_storage_source,
-                            &mut output_data,
-                            shuffle_event_source,
-                            &system_swaps,
-                            &persistent_system_nodes,
-                        );
-
-                        output_data.push_child(shuffle_event_restore, removal);
-                        output_data.push_child(shuffle_event_activate, addition);
-                    }
-                }
+                generate_event(
+                    data,
+                    &mut output_data,
+                    shuffle_event_source,
+                    (shuffle_event_restore, shuffle_event_activate),
+                    &system_swaps,
+                    event_map,
+                );
             }
 
             zip_root_nodes(
@@ -738,7 +681,7 @@ pub fn process(
         {
             let output_root_node_count = output_data.root_nodes().len();
 
-            for (&event_name, event_map) in persistent_event_system_nodes.iter() {
+            for &event_name in persistent_event_nodes.keys() {
                 for (should_activate, kind_name) in [
                     (false, restore_name.as_str()),
                     (true, activate_name.as_str()),
@@ -760,15 +703,6 @@ pub fn process(
                     let mission_to_offer = tree_from_tokens!(
                         &mut output_data; shuffle_event_source =>
                         : "to", "offer" ;
-                        {
-                            :
-                                match should_activate {
-                                    false => "not",
-                                    true => "has",
-                                },
-                                format!("event: {event_name}")
-                            ;
-                        }
                     );
 
                     output_data.push_child(shuffle_mission, mission_to_offer);
@@ -780,61 +714,20 @@ pub fn process(
 
                     output_data.push_child(shuffle_mission, mission_on_offer);
 
-                    for original_kind in ["wormhole", "system"] {
-                        if !event_map
-                            .keys()
-                            .any(|&(node_kind, _)| node_kind == original_kind)
-                        {
-                            continue;
-                        }
+                    let ((condition1, condition2), (action1, action2)) =
+                        generate_side_event_conditions(
+                            event_name,
+                            (restore_name.as_str(), activate_name.as_str()),
+                            (should_activate, false),
+                            &mut output_data,
+                            shuffle_event_source,
+                        );
 
-                        match should_activate {
-                            false => {
-                                let condition = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                    : "has", format!("event: {original_kind}: {activate_name}: {event_name}") ;
-                                );
+                    output_data.push_child(mission_to_offer, condition1);
+                    output_data.push_child(mission_to_offer, condition2);
 
-                                output_data.push_child(mission_to_offer, condition);
-
-                                let action = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                        : "event", format!("{original_kind}: {restore_name}: {event_name}"), "0" ;
-                                );
-
-                                output_data.push_child(mission_on_offer, action);
-
-                                let action = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                        : format!("event {original_kind}: {activate_name}: {event_name}"), "=", "0" ;
-                                );
-
-                                output_data.push_child(mission_on_offer, action);
-                            }
-                            true => {
-                                let condition = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                    : format!("event: {original_kind}: {activate_name}: {event_name}"), "!=", format!("event: {event_name}") ;
-                                );
-
-                                output_data.push_child(mission_to_offer, condition);
-
-                                let action = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                    : "event", format!("{original_kind}: {activate_name}: {event_name}"), "0" ;
-                                );
-
-                                output_data.push_child(mission_on_offer, action);
-
-                                let action = tree_from_tokens!(
-                                    &mut output_data; shuffle_event_source =>
-                                    : format!("event: {original_kind}: {activate_name}: {event_name}"), "=", format!("event: {event_name}") ;
-                                );
-
-                                output_data.push_child(mission_on_offer, action);
-                            }
-                        }
-                    }
+                    output_data.push_child(mission_on_offer, action1);
+                    output_data.push_child(mission_on_offer, action2);
 
                     let mission_failure = tree_from_tokens!(
                         &mut output_data; shuffle_event_source =>
@@ -887,23 +780,29 @@ fn find_wormholes_from_system<'a>(
     data: &'a Data,
     (system_name, source_index, node_index): (&'a str, SourceIndex, NodeIndex),
     (depth, planets, wormholes): (u64, &mut HashMap<&'a str, &'a str>, &mut HashSet<&'a str>),
-    shuffle_storage: &mut Data,
-    shuffle_storage_source: SourceIndex,
-    persistent_system_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+    persistent_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
 ) -> bool {
     let mut is_any_wormhole = false;
 
-    for child in node_path_iter!(data => (source_index, node_index); "object").chain(
-        node_path_iter!(data => (source_index, node_index); "add" | "remove").filter(
-            |&node_index| {
-                data.get_tokens(node_index)
-                    .and_then(|tokens| tokens.get(1))
-                    .and_then(|t| data.get_lexeme(source_index, *t))
-                    .unwrap_or_default()
-                    == "object"
-            },
-        ),
-    ) {
+    for child in data.filter_children(source_index, node_index, |source_index, tokens| {
+        let key_index = if matches!(
+            tokens
+                .first()
+                .and_then(|t| data.get_lexeme(source_index, *t)),
+            Some("remove" | "add")
+        ) {
+            1
+        } else {
+            0
+        };
+
+        matches!(
+            tokens
+                .get(key_index)
+                .and_then(|t| data.get_lexeme(source_index, *t)),
+            Some(l) if l == "object"
+        )
+    }) {
         let mut is_wormhole = false;
 
         if let Some(object_name) = data
@@ -929,29 +828,33 @@ fn find_wormholes_from_system<'a>(
             data,
             (system_name, source_index, child),
             (depth + 1, planets, wormholes),
-            shuffle_storage,
-            shuffle_storage_source,
-            persistent_system_nodes,
+            persistent_nodes,
         );
 
         if depth == 0 && is_wormhole {
-            let (removal, addition) = addition_and_removal(
-                data,
-                ("object", source_index, child),
-                shuffle_storage,
-                shuffle_storage_source,
-            );
+            let action = match data
+                .get_tokens(child)
+                .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
+                .unwrap()
+            {
+                "remove" => {
+                    if data.get_tokens(child).unwrap_or_default().len() >= 2
+                        || !data.get_children(child).unwrap_or_default().is_empty()
+                    {
+                        NodeAction::Remove
+                    } else {
+                        NodeAction::ClearRemove
+                    }
+                }
+                "add" => NodeAction::Add,
+                _ => NodeAction::ClearAdd,
+            };
 
-            let is_removing = data
-                .get_lexeme(source_index, data.get_tokens(child).unwrap_or_default()[0])
-                .unwrap_or_default()
-                == "remove";
-
-            persistent_system_nodes.persist(
+            persistent_nodes.persist(
                 "system",
                 system_name,
                 "object",
-                OriginalNode::new(is_removing, removal, addition),
+                OriginalNode::new(action, source_index, child),
             );
         }
     }
@@ -959,20 +862,28 @@ fn find_wormholes_from_system<'a>(
     is_any_wormhole
 }
 
-type OriginalNodes<'a> = HashMap<&'a str, Vec<(bool, NodeIndex, NodeIndex)>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum NodeAction {
+    Remove,
+    ClearRemove,
+    Add,
+    ClearAdd,
+}
+
+type OriginalNodes<'a> = HashMap<&'a str, Vec<(NodeAction, SourceIndex, NodeIndex)>>;
 
 struct OriginalNode {
-    is_removing: bool,
-    removal: NodeIndex,
-    addition: NodeIndex,
+    action: NodeAction,
+    source: SourceIndex,
+    node: NodeIndex,
 }
 
 impl OriginalNode {
-    fn new(is_removing: bool, removal: NodeIndex, addition: NodeIndex) -> Self {
+    fn new(action: NodeAction, source: SourceIndex, node: NodeIndex) -> Self {
         Self {
-            is_removing,
-            removal,
-            addition,
+            action,
+            source,
+            node,
         }
     }
 }
@@ -983,7 +894,7 @@ trait NodePersistence<'a> {
         original_node_kind: &'a str,
         original_node_name: &'a str,
         node_kind: &'a str,
-        node: OriginalNode,
+        original_node: OriginalNode,
     );
 }
 
@@ -993,43 +904,55 @@ impl<'a> NodePersistence<'a> for HashMap<(&'a str, &'a str), OriginalNodes<'a>> 
         original_node_kind: &'a str,
         original_node_name: &'a str,
         node_kind: &'a str,
-        node: OriginalNode,
+        original_node: OriginalNode,
     ) {
         HashMap::entry(self, (original_node_kind, original_node_name))
             .and_modify(|e| {
                 e.entry(node_kind)
                     .and_modify(|v| {
-                        v.push((node.is_removing, node.removal, node.addition));
+                        if !v.iter().any(|&(action, source, node)| {
+                            action == original_node.action
+                                && source == original_node.source
+                                && node == original_node.node
+                        }) {
+                            v.push((
+                                original_node.action,
+                                original_node.source,
+                                original_node.node,
+                            ));
+                        }
                     })
-                    .or_insert(vec![(node.is_removing, node.removal, node.addition)]);
+                    .or_insert(vec![(
+                        original_node.action,
+                        original_node.source,
+                        original_node.node,
+                    )]);
             })
             .or_insert({
                 let mut nodes = HashMap::new();
                 nodes.insert(
                     node_kind,
-                    vec![(node.is_removing, node.removal, node.addition)],
+                    vec![(
+                        original_node.action,
+                        original_node.source,
+                        original_node.node,
+                    )],
                 );
                 nodes
             });
     }
 }
 
-fn data_from_system<'a>(
+fn data_from_node<'a>(
     data: &'a Data,
     nodes: impl Iterator<Item = (SourceIndex, NodeIndex)>,
     system_names: &mut HashSet<&'a str>,
     (planets, wormholes): (&mut HashMap<&'a str, &'a str>, &mut HashSet<&'a str>),
-    shuffle_storage: &mut Data,
-    shuffle_storage_source: SourceIndex,
-    persistent_system_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+    persistent_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
 ) {
-    for (source_index, node_index) in nodes.filter(|(_, node_index)| {
-        data.get_tokens(*node_index).unwrap_or_default().len() >= 2
-            && !data
-                .get_children(*node_index)
-                .unwrap_or_default()
-                .is_empty()
-    }) {
+    for (source_index, node_index) in
+        nodes.filter(|(_, node_index)| data.get_tokens(*node_index).unwrap_or_default().len() >= 2)
+    {
         let original_node_kind = data
             .get_tokens(node_index)
             .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
@@ -1040,53 +963,52 @@ fn data_from_system<'a>(
             .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
             .unwrap();
 
-        if original_node_kind == "system" {
-            system_names.insert(original_node_name);
+        match original_node_kind {
+            "system" => {
+                system_names.insert(original_node_name);
 
-            find_wormholes_from_system(
-                data,
-                (original_node_name, source_index, node_index),
-                (0, planets, wormholes),
-                shuffle_storage,
-                shuffle_storage_source,
-                persistent_system_nodes,
-            );
+                find_wormholes_from_system(
+                    data,
+                    (original_node_name, source_index, node_index),
+                    (0, planets, wormholes),
+                    persistent_nodes,
+                );
+            }
+            "link" => {
+                persistent_nodes.persist(
+                    original_node_kind,
+                    "",
+                    original_node_kind,
+                    OriginalNode::new(NodeAction::Add, source_index, node_index),
+                );
+            }
+            "unlink" => {
+                persistent_nodes.persist(
+                    original_node_kind,
+                    "",
+                    original_node_kind,
+                    OriginalNode::new(NodeAction::Remove, source_index, node_index),
+                );
+            }
+            _ => {}
         }
 
-        for child in node_path_iter!(
-            data => (source_index, node_index); "pos"
-        )
-        .filter(|&child| data.get_tokens(child).unwrap_or_default().len() >= 2)
-        {
-            let x = data
-                .get_lexeme(source_index, data.get_tokens(child).unwrap()[1])
-                .unwrap();
-
-            let y = data
-                .get_lexeme(source_index, data.get_tokens(child).unwrap()[2])
-                .unwrap();
-
-            let copied_node = tree_from_tokens!(
-                shuffle_storage; shuffle_storage_source =>
-                : "pos", x, y ;
-            );
-
-            persistent_system_nodes.persist(
-                original_node_kind,
-                original_node_name,
-                "pos",
-                OriginalNode::new(false, copied_node, copied_node),
-            );
-        }
-
-        for node_kind in [
-            ["link", "jump range", "inaccessible", "hidden", "shrouded"].as_slice(),
+        for node_kind in match original_node_kind {
             // TODO: find a way for this to work without crashing the game (may be impossible for a plugin)
             // (wormhole logic can be removed if it is possible)
             // ["object", "hazard", "arrival", "departure"].as_slice(),
-        ]
-        .concat()
-        {
+            "system" => [
+                "pos",
+                "link",
+                "jump range",
+                "inaccessible",
+                "hidden",
+                "shrouded",
+            ]
+            .as_slice(),
+            "wormhole" => ["link"].as_slice(),
+            _ => [].as_slice(),
+        } {
             for child in data.filter_children(source_index, node_index, |source_index, tokens| {
                 let key_index = if matches!(
                     tokens
@@ -1103,152 +1025,116 @@ fn data_from_system<'a>(
                     tokens
                         .get(key_index)
                         .and_then(|t| data.get_lexeme(source_index, *t)),
-                    Some(l) if l == node_kind
+                    Some(l) if l == *node_kind
                 )
             }) {
-                let (removal, addition) = addition_and_removal(
-                    data,
-                    (node_kind, source_index, child),
-                    shuffle_storage,
-                    shuffle_storage_source,
-                );
+                let action = match data
+                    .get_tokens(child)
+                    .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
+                    .unwrap()
+                {
+                    "remove" => {
+                        if data.get_tokens(child).unwrap_or_default().len() >= 2
+                            || !data.get_children(child).unwrap_or_default().is_empty()
+                        {
+                            NodeAction::Remove
+                        } else {
+                            NodeAction::ClearRemove
+                        }
+                    }
+                    "add" => NodeAction::Add,
+                    _ => NodeAction::ClearAdd,
+                };
 
-                let is_removing = data
-                    .get_lexeme(source_index, data.get_tokens(child).unwrap_or_default()[0])
-                    .unwrap_or_default()
-                    == "remove";
-
-                persistent_system_nodes.persist(
+                persistent_nodes.persist(
                     original_node_kind,
                     original_node_name,
                     node_kind,
-                    OriginalNode::new(is_removing, removal, addition),
+                    OriginalNode::new(action, source_index, child),
                 );
             }
         }
     }
 }
 
-fn addition_and_removal(
-    data: &Data,
-    (node_kind, source_index, child): (&str, SourceIndex, NodeIndex),
-    shuffle_storage: &mut Data,
-    shuffle_storage_source: SourceIndex,
-) -> (NodeIndex, NodeIndex) {
-    let (mut removal, mut addition) = (None, None);
-
-    for should_activate in [false, true] {
-        let action = match node_kind {
-            "jump range" | "inaccessible" | "hidden" | "shrouded" | "arrival" | "departure" => {
-                match should_activate {
-                    false => tree_from_tokens!(
-                        shuffle_storage; shuffle_storage_source =>
-                        : "remove", node_kind ;
-                    ),
-                    true => copy_node(
-                        data,
-                        (source_index, child),
-                        shuffle_storage,
-                        shuffle_storage_source,
-                        should_activate,
-                    )
-                    .unwrap(),
-                }
-            }
-            _ => {
-                let action = copy_node(
-                    data,
-                    (source_index, child),
-                    shuffle_storage,
-                    shuffle_storage_source,
-                    should_activate,
-                )
-                .unwrap();
-
-                let (span_start, span_end) = shuffle_storage
-                    .push_source(
-                        shuffle_storage_source,
-                        match should_activate {
-                            false => "remove",
-                            true => "add",
-                        },
-                    )
-                    .unwrap();
-
-                match shuffle_storage.get_mut_node(action).unwrap() {
-                    Node::Error => unreachable!(),
-                    Node::Some { tokens } | Node::Parent { tokens, .. } => {
-                        if data
-                            .get_tokens(child)
-                            .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
-                            .unwrap()
-                            == node_kind
-                        {
-                            tokens.insert(
-                                0,
-                                Token::new(TokenKind::Symbol, Span::new(span_start, span_end)),
-                            );
-                        } else {
-                            *tokens.first_mut().unwrap() =
-                                Token::new(TokenKind::Symbol, Span::new(span_start, span_end));
-                        }
-                    }
-                }
-
-                action
-            }
-        };
-
-        match should_activate {
-            false => removal = Some(action),
-            true => addition = Some(action),
-        }
-    }
-
-    (removal.take().unwrap(), addition.take().unwrap())
-}
-
 fn modify_node(
-    (original_kind, original, replacement): (&str, &str, &str),
-    shuffle_storage: &Data,
-    shuffle_storage_source: SourceIndex,
+    (original_kind, original): (&str, &str),
+    data: &Data,
     output_data: &mut Data,
     shuffle_event_source: SourceIndex,
     system_swaps: &HashMap<&str, &str>,
-    persistent_system_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
-) -> (NodeIndex, NodeIndex) {
-    let persistent_nodes = persistent_system_nodes
-        .get(&(original_kind, original))
-        .unwrap();
+    persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
+) -> (Vec<NodeIndex>, Vec<NodeIndex>) {
+    let persistent_nodes = persistent_nodes.get(&(original_kind, original)).unwrap();
 
     let (mut restoration, mut activation) = (None, None);
 
     for should_activate in [false, true] {
-        let modified_node = tree_from_tokens!(
-            output_data; shuffle_event_source =>
-            : original_kind, replacement ;
-        );
+        let mut modified_nodes = vec![];
 
         for (node_kind, node_values) in persistent_nodes.iter() {
-            for (i, node_value) in node_values.iter().enumerate() {
-                match *node_kind {
-                    "link" => {
-                        let modified_link = if (should_activate && !node_value.0)
-                            || (!should_activate && node_value.0)
-                        {
-                            let modified_link = tree_from_tokens!(
-                                output_data; shuffle_event_source =>
-                                : "link" ;
-                            );
+            let mut removed_all = false;
 
-                            for lexeme in shuffle_storage
-                                .get_tokens(node_value.1)
+            for node_value in node_values.iter() {
+                let is_adding = (should_activate
+                    && matches!(node_value.0, NodeAction::Add | NodeAction::ClearAdd))
+                    || (!should_activate
+                        && matches!(node_value.0, NodeAction::Remove | NodeAction::ClearRemove));
+
+                match *node_kind {
+                    "pos" => {
+                        let modified_copy = copy_node(
+                            data,
+                            (node_value.1, node_value.2),
+                            output_data,
+                            shuffle_event_source,
+                            true,
+                        )
+                        .unwrap();
+
+                        modified_nodes.push(modified_copy);
+                    }
+                    "link" | "unlink" => {
+                        if original_kind == "wormhole" && !is_adding {
+                            if removed_all {
+                                break;
+                            }
+
+                            removed_all = true;
+                        }
+
+                        let modified_link = if is_adding {
+                            match original_kind {
+                                "link" | "unlink" => tree_from_tokens!(
+                                    output_data; shuffle_event_source =>
+                                    : "link" ;
+                                ),
+                                _ => tree_from_tokens!(
+                                    output_data; shuffle_event_source =>
+                                    : "add", "link" ;
+                                ),
+                            }
+                        } else {
+                            match original_kind {
+                                "link" | "unlink" => tree_from_tokens!(
+                                    output_data; shuffle_event_source =>
+                                    : "unlink" ;
+                                ),
+                                _ => tree_from_tokens!(
+                                    output_data; shuffle_event_source =>
+                                    : "remove", "link" ;
+                                ),
+                            }
+                        };
+
+                        if original_kind != "wormhole" || is_adding {
+                            for lexeme in data
+                                .get_tokens(node_value.2)
                                 .unwrap_or_default()
                                 .iter()
-                                .skip(2)
-                                .flat_map(|t| {
-                                    shuffle_storage.get_lexeme(shuffle_storage_source, *t)
-                                })
+                                .flat_map(|t| data.get_lexeme(node_value.1, *t))
+                                .skip_while(|l| l != node_kind)
+                                .skip(1)
                             {
                                 let (start, end) = output_data
                                     .push_source(
@@ -1262,57 +1148,105 @@ fn modify_node(
                                     Token::new(TokenKind::Symbol, Span::new(start, end)),
                                 );
                             }
-
-                            modified_link
-                        } else {
-                            if i > 0 {
-                                break;
-                            }
-
-                            tree_from_tokens!(
-                                output_data; shuffle_event_source =>
-                                : "remove", "link" ;
-                            )
-                        };
-
-                        output_data.push_child(modified_node, modified_link);
-                    }
-                    _ => {
-                        if i > 0 {
-                            match *node_kind {
-                                "link" | "jump range" | "inaccessible" | "hidden" | "shrouded"
-                                | "arrival" | "departure" => break,
-                                _ => {}
-                            }
                         }
 
+                        modified_nodes.push(modified_link);
+                    }
+                    "object" => {
                         let modified_copy = copy_node(
-                            shuffle_storage,
-                            (
-                                shuffle_storage_source,
-                                if (should_activate && !node_value.0)
-                                    || (!should_activate && node_value.0)
-                                {
-                                    node_value.2
-                                } else {
-                                    node_value.1
-                                },
-                            ),
+                            data,
+                            (node_value.1, node_value.2),
                             output_data,
                             shuffle_event_source,
-                            true,
+                            is_adding,
                         )
                         .unwrap();
 
-                        output_data.push_child(modified_node, modified_copy);
+                        let (start, end) = output_data
+                            .push_source(
+                                shuffle_event_source,
+                                if is_adding { "add" } else { "remove" },
+                            )
+                            .unwrap();
+
+                        if let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
+                            output_data.get_mut_node(modified_copy)
+                        {
+                            let modified_token =
+                                Token::new(TokenKind::Symbol, Span::new(start, end));
+
+                            if matches!(
+                                data.get_tokens(node_value.2)
+                                    .and_then(|tokens| data.get_lexeme(node_value.1, tokens[0])),
+                                Some("add" | "remove")
+                            ) && let Some(modifier) = tokens.first_mut()
+                            {
+                                *modifier = modified_token;
+                            } else {
+                                tokens.insert(0, modified_token);
+                            }
+                        }
+
+                        modified_nodes.push(modified_copy);
+                    }
+                    _ => {
+                        let modified_copy = if matches!(
+                            (should_activate, node_value.0),
+                            (true, NodeAction::Add | NodeAction::ClearAdd)
+                                | (false, NodeAction::Remove | NodeAction::ClearRemove)
+                        ) {
+                            let modified_copy = copy_node(
+                                data,
+                                (node_value.1, node_value.2),
+                                output_data,
+                                shuffle_event_source,
+                                true,
+                            )
+                            .unwrap();
+
+                            if let Some("add" | "remove") = output_data.get_lexeme(
+                                shuffle_event_source,
+                                output_data.get_tokens(modified_copy).unwrap()[0],
+                            ) && let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
+                                output_data.get_mut_node(modified_copy)
+                            {
+                                tokens.remove(0);
+                            }
+
+                            modified_copy
+                        } else {
+                            tree_from_tokens!(
+                                output_data; shuffle_event_source =>
+                                : "remove", node_kind ;
+                            )
+                        };
+
+                        modified_nodes.push(modified_copy);
                     }
                 }
             }
         }
 
+        modified_nodes.sort_by(|&a, &b| {
+            match (
+                output_data
+                    .get_tokens(a)
+                    .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0]))
+                    .unwrap(),
+                output_data
+                    .get_tokens(b)
+                    .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0]))
+                    .unwrap(),
+            ) {
+                ("remove", _) => Ordering::Less,
+                (_, "remove") => Ordering::Greater,
+                (_, _) => Ordering::Equal,
+            }
+        });
+
         match should_activate {
-            false => restoration = Some(modified_node),
-            true => activation = Some(modified_node),
+            false => restoration = Some(modified_nodes),
+            true => activation = Some(modified_nodes),
         }
     }
 
@@ -1323,9 +1257,8 @@ fn conditional_events(
     settings: &SystemShufflerConfig,
     output_data: &mut Data,
     (source, parent): (SourceIndex, NodeIndex),
-    condition: &str,
-    event_name_prefix: &str,
-    label_suffix: &str,
+    (should_activate, event_name_prefix, label_suffix): (bool, &str, &str),
+    persistent_event_node_keys: &[&str],
 ) {
     for preset_index in 0..=(settings.max_presets) {
         let skip_label = format!("not {preset_index} {label_suffix}");
@@ -1334,7 +1267,7 @@ fn conditional_events(
             output_data; source =>
             : "branch", skip_label.as_str() ;
             {
-                : condition, "!=", preset_index ;
+                : CURRENT_PRESET, "!=", preset_index ;
             }
         );
 
@@ -1344,12 +1277,58 @@ fn conditional_events(
             output_data; source =>
             : "action" ;
             {
-                : "event", format!("wormhole: {event_name_prefix} {preset_index}"), "0" ;
-                : "event", format!("system: {event_name_prefix} {preset_index}"), "0" ;
+                : "event", format!("{event_name_prefix} {preset_index}"), "0" ;
             }
         );
 
         output_data.push_child(parent, event_action);
+
+        for &event_name in persistent_event_node_keys {
+            let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
+            let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
+
+            let skip_label = format!("not {preset_index} {label_suffix} {event_name}");
+
+            let ((condition1, condition2), (action1, action2)) = generate_side_event_conditions(
+                event_name,
+                (restore_name.as_str(), activate_name.as_str()),
+                (should_activate, true),
+                output_data,
+                source,
+            );
+
+            let event_branch = tree_from_tokens!(
+                output_data; source =>
+                : "branch", skip_label.as_str() ;
+            );
+
+            output_data.push_child(parent, event_branch);
+
+            let branch_or = tree_from_tokens!(
+                output_data; source =>
+                : "or" ;
+            );
+
+            output_data.push_child(event_branch, branch_or);
+            output_data.push_child(branch_or, condition1);
+            output_data.push_child(branch_or, condition2);
+
+            let event_action = tree_from_tokens!(
+                output_data; source =>
+                : "action" ;
+            );
+
+            output_data.push_child(parent, event_action);
+            output_data.push_child(event_action, action1);
+            output_data.push_child(event_action, action2);
+
+            let event_label = tree_from_tokens!(
+                output_data; source =>
+                : "label", skip_label.as_str() ;
+            );
+
+            output_data.push_child(parent, event_label);
+        }
 
         let event_label = tree_from_tokens!(
             output_data; source =>
@@ -1363,11 +1342,202 @@ fn conditional_events(
                 output_data; source =>
                 : "action" ;
                 {
-                    : condition, "=", condition ;
+                    : CURRENT_PRESET, "=", CURRENT_PRESET ;
                 }
             );
 
             output_data.push_child(parent, blank_action);
+        }
+    }
+}
+
+fn generate_event<'a>(
+    data: &'a Data,
+    output_data: &mut Data,
+    shuffle_event_source: SourceIndex,
+    (shuffle_event_restore, shuffle_event_activate): (NodeIndex, NodeIndex),
+    system_swaps: &HashMap<&'a str, &'a str>,
+    persistent_nodes: &HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+) {
+    let mut persistent_node_keys = persistent_nodes.keys().copied().collect::<Vec<_>>();
+
+    persistent_node_keys.sort();
+
+    for (original_kind, original) in persistent_node_keys {
+        let replacement = if original_kind == "system" {
+            *system_swaps.get(original).unwrap()
+        } else {
+            original
+        };
+
+        let (removals, additions) = modify_node(
+            (original_kind, original),
+            data,
+            output_data,
+            shuffle_event_source,
+            system_swaps,
+            persistent_nodes,
+        );
+
+        // do everything but links first in case `remove link` is one of the removals or additions
+        //
+        // this block is kind of ugly, in a beautiful way
+        let nodes_with_parent = removals
+            .iter()
+            .filter(|&&node_index| {
+                !matches!(
+                    output_data
+                        .get_tokens(node_index)
+                        .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0])),
+                    Some("link" | "unlink")
+                )
+            })
+            .map(|&node_index| (false, node_index))
+            .chain(
+                additions
+                    .iter()
+                    .filter(|&&node_index| {
+                        !matches!(
+                            output_data
+                                .get_tokens(node_index)
+                                .and_then(|tokens| output_data
+                                    .get_lexeme(shuffle_event_source, tokens[0])),
+                            Some("link" | "unlink")
+                        )
+                    })
+                    .map(|&node_index| (true, node_index)),
+            )
+            .collect::<Vec<_>>();
+
+        if !nodes_with_parent.is_empty() {
+            let parent_restore = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : original_kind, replacement ;
+            );
+
+            let parent_activate = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : original_kind, replacement ;
+            );
+
+            for (activate, modification) in nodes_with_parent {
+                output_data.push_child(
+                    if activate {
+                        parent_activate
+                    } else {
+                        parent_restore
+                    },
+                    modification,
+                );
+            }
+
+            output_data.push_child(shuffle_event_restore, parent_restore);
+            output_data.push_child(shuffle_event_activate, parent_activate);
+        }
+
+        // copy and paste for now, I can always make it better later
+        // TODO: don't copy and paste
+        for (modification_parent, modification) in removals
+            .iter()
+            .filter(|&&node_index| {
+                matches!(
+                    output_data
+                        .get_tokens(node_index)
+                        .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0])),
+                    Some("link" | "unlink")
+                )
+            })
+            .map(|&node_index| (shuffle_event_restore, node_index))
+            .chain(
+                additions
+                    .iter()
+                    .filter(|&&node_index| {
+                        matches!(
+                            output_data
+                                .get_tokens(node_index)
+                                .and_then(|tokens| output_data
+                                    .get_lexeme(shuffle_event_source, tokens[0])),
+                            Some("link" | "unlink")
+                        )
+                    })
+                    .map(|&node_index| (shuffle_event_activate, node_index)),
+            )
+            .collect::<Vec<_>>()
+        {
+            output_data.push_child(modification_parent, modification);
+        }
+    }
+}
+
+fn generate_side_event_conditions(
+    event_name: &str,
+    (restore_name, activate_name): (&str, &str),
+    (should_activate, invert): (bool, bool),
+    output_data: &mut Data,
+    shuffle_event_source: SourceIndex,
+) -> ((NodeIndex, NodeIndex), (NodeIndex, NodeIndex)) {
+    let condition1 = tree_from_tokens!(
+        output_data; shuffle_event_source =>
+        :
+            match should_activate {
+                false if invert => "has",
+                false => "not",
+                true if invert => "not",
+                true => "has",
+            },
+            format!("event: {event_name}")
+        ;
+    );
+
+    match should_activate {
+        false => {
+            let condition2 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                :
+                    match invert {
+                        false => "has",
+                        true => "not",
+                    },
+                    format!("event: {activate_name}: {event_name}")
+                ;
+            );
+
+            let action1 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : "event", format!("{restore_name}: {event_name}"), "0" ;
+            );
+
+            let action2 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : format!("event: {activate_name}: {event_name}"), "=", "0" ;
+            );
+
+            ((condition1, condition2), (action1, action2))
+        }
+        true => {
+            let condition2 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                :
+                    format!("event: {activate_name}: {event_name}"),
+                    match invert {
+                        false => "!=",
+                        true => "==",
+                    },
+                    format!("event: {event_name}")
+                ;
+            );
+
+            let action1 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : "event", format!("{activate_name}: {event_name}"), "0" ;
+            );
+
+            let action2 = tree_from_tokens!(
+                output_data; shuffle_event_source =>
+                : format!("event: {activate_name}: {event_name}"), "=", format!("event: {event_name}") ;
+            );
+
+            ((condition1, condition2), (action1, action2))
         }
     }
 }
