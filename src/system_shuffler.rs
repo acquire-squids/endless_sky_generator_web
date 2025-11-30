@@ -1139,7 +1139,7 @@ fn addition_and_removal(
 
     for should_activate in [false, true] {
         let action = match node_kind {
-            "jump range" | "inaccessible" | "hidden" | "shrouded" | "arrival" | "departure" => {
+            "inaccessible" | "hidden" | "shrouded" | "arrival" | "departure" => {
                 match should_activate {
                     false => tree_from_tokens!(
                         shuffle_storage; shuffle_storage_source =>
@@ -1155,6 +1155,20 @@ fn addition_and_removal(
                     .unwrap(),
                 }
             }
+            "jump range" => match should_activate {
+                false => tree_from_tokens!(
+                    shuffle_storage; shuffle_storage_source =>
+                    : node_kind, "0" ;
+                ),
+                true => copy_node(
+                    data,
+                    (source_index, child),
+                    shuffle_storage,
+                    shuffle_storage_source,
+                    should_activate,
+                )
+                .unwrap(),
+            },
             _ => {
                 let action = copy_node(
                     data,
