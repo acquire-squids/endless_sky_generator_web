@@ -19,7 +19,7 @@ const PLUGIN_VERSION: &str = "0.4.0";
 
 const INSTALLED: &str = "System Shuffler: Installed";
 const CURRENT_PRESET: &str = "System Shuffler: Current Preset";
-const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle";
+const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle Day";
 
 const RESTORE_PREFIX: &str = "System Shuffler: Restore Preset";
 const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
@@ -402,7 +402,7 @@ pub fn process(
                 {
                     : INSTALLED, "=", "1" ;
                     : CURRENT_PRESET, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
-                    : RESTORE_PREFIX, "=", "days since epoch" ;
+                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
                 }
             );
 
@@ -479,6 +479,7 @@ pub fn process(
                 &mut output_data; restore_job_source =>
                 : "action" ;
                 {
+                    : INSTALLED, "=", "1" ;
                     : CURRENT_PRESET, "=", "0" ;
                     : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
                     : "event", format!("{ACTIVATE_PREFIX} 0").as_str(), "0" ;
@@ -486,6 +487,14 @@ pub fn process(
             );
 
             output_data.push_child(restore_job_conversation, preset_selection);
+
+            conditional_events(
+                &settings,
+                &mut output_data,
+                (restore_job_source, restore_job_conversation),
+                (true, ACTIVATE_PREFIX, "activate"),
+                persistent_event_node_keys.as_slice(),
+            );
 
             let main_failure = tree_from_tokens!(
                 &mut output_data; restore_job_source =>
@@ -688,7 +697,7 @@ pub fn process(
                 ] {
                     let shuffle_mission = tree_from_tokens!(
                         &mut output_data; shuffle_event_source =>
-                        : "mission", format!("{kind_name}: {event_name}") ;
+                        : "mission", format!("zzzzz {kind_name}: {event_name}") ;
                         {
                             : "invisible" ;
                             : "repeat" ;
@@ -703,6 +712,10 @@ pub fn process(
                     let mission_to_offer = tree_from_tokens!(
                         &mut output_data; shuffle_event_source =>
                         : "to", "offer" ;
+                        {
+                            : "has", INSTALLED ;
+                            : CURRENT_PRESET, "==", preset_index ;
+                        }
                     );
 
                     output_data.push_child(shuffle_mission, mission_to_offer);
@@ -1091,6 +1104,25 @@ fn modify_node(
                             true,
                         )
                         .unwrap();
+
+                        modified_nodes.push(modified_copy);
+                    }
+                    "jump range" => {
+                        let modified_copy = if !is_adding {
+                            tree_from_tokens!(
+                                output_data; shuffle_event_source =>
+                                : "jump range", "0" ;
+                            )
+                        } else {
+                            copy_node(
+                                data,
+                                (node_value.1, node_value.2),
+                                output_data,
+                                shuffle_event_source,
+                                true,
+                            )
+                            .unwrap()
+                        };
 
                         modified_nodes.push(modified_copy);
                     }
