@@ -22,8 +22,8 @@
         <h2>Template Plugin</h2>
       </header>
       <p>
-        A template plugin made for testing this web generator.<br /><br />
-        The Rust code's kind of verbose, but that's okay.<br />
+        A template plugin made for testing this web generator.<br/><br/>
+        The Rust code's kind of verbose, but that's okay.<br/>
         I made it for myself to use and I like using it, and that's all that matters.
       </p>
       <input id="template-output" type="button" value="Download"></input>
@@ -33,8 +33,8 @@
         <h2>Full Map</h2>
       </header>
       <p>
-        A plugin that reveals every system and planet in the uploaded data folder when activated by a job available in any job board.<br /><br />
-        This works by reading all `system` root nodes.  A system created by an event and defined nowhere else won't be included.<br />
+        A plugin that reveals every system and planet in the uploaded data folder when activated by a job available in any job board.<br/><br/>
+        This works by reading all `system` root nodes.  A system created by an event and defined nowhere else won't be included.<br/>
         If a system is hidden or shrouded, it may not remain revealed after takeoff, if it is even revealed at all.
       </p>
       <input id="full-map-output" type="button" value="Download"></input>
@@ -54,27 +54,38 @@
           <li>Every N days, with the shuffle happening after a greater amount of time if you have not landed for N days</li>
         </ul>
         Additionally, you can request a shuffle or restore at any point through any job board.<br/><br/>
-        <b>Be wary of repeated shuffling!</b>  If your version of Endless Sky copies the whole event definition into your save each time it triggers (this is the default as of 0.10.16), <b>your save file has potential to explode in size!</b>
+        <b>Be wary of repeated shuffling!</b><br/>
+        If you play on a version <b>before 0.10.17's unstable release</b>, event definitions are fully copied into your save file and <b>your save file has potential to explode in size!</b>
       </p>
       <div>
         <label>seed:</label>
+      </div>
+      <div>
         <input id="system-shuffler-seed" type="number" value=0></input>
       </div>
       <div>
         <label>max presets:</label>
+      </div>
+      <div>
         <input id="system-shuffler-max-presets" type="number" value=1 min=1 max=255></input>
       </div>
       <div>
         <label>shuffle once upon installation:</label>
+      </div>
+      <div>
         <input id="system-shuffler-shuffle-once-on-install" type="checkbox"></input>
       </div>
       <div>
         <label>chance to shuffle every time you land:</label>
+      </div>
+      <div>
         <input id="system-shuffler-shuffle-chance" type="range" value=0 min=0 max=100></input>
         <input id="system-shuffler-shuffle-chance-output" type="number" value=0 min=0 max=100></input>
       </div>
       <div>
         <label>shuffle every N days (0 to disable):</label>
+      </div>
+      <div>
         <input id="system-shuffler-fixed-shuffle-days" type="range" value=0 min=0 max=255></input>
         <input id="system-shuffler-fixed-shuffle-days-output" type="number" value=0 min=0 max=255></input>
       </div>
