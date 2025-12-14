@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+set -ex
+
+cargo clippy \
+  --target wasm32-unknown-unknown \
+  --release
+
 cargo build \
   --target wasm32-unknown-unknown \
   --release
