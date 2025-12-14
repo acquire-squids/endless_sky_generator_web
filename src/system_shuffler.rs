@@ -292,9 +292,8 @@ pub fn process(
 
     system_names.sort();
 
-    let mut persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
-
-    persistent_event_node_keys.sort();
+    // TODO: sort events by when they happen chronologically?
+    let persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
 
     archive.write_dir("data/")?;
 
@@ -306,13 +305,13 @@ pub fn process(
 
             let main_mission = tree_from_tokens!(
                 &mut output_data; main_mission_source =>
-                : "mission", "System Shuffler: Select Preset" ;
+                : "mission", "zzzzz System Shuffler: Select Preset" ;
                 {
                     : "invisible" ;
                     : "repeat" ;
                     : "non-blocking" ;
                     : "landing" ;
-                    : "offer precedence", "1000000" ;
+                    : "offer precedence", "-1000000" ;
                 }
             );
 
@@ -429,7 +428,7 @@ pub fn process(
 
             let restore_job = tree_from_tokens!(
                 &mut output_data; restore_job_source =>
-                : "mission", "System Shuffler: Restore Universe" ;
+                : "mission", "zzzzz System Shuffler: Restore Universe" ;
                 {
                     : "name", "Unshuffle the universe" ;
                     : "description", "Restore all systems in the universe to how they should be, free of charge." ;
@@ -482,7 +481,6 @@ pub fn process(
                     : INSTALLED, "=", "1" ;
                     : CURRENT_PRESET, "=", "0" ;
                     : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
-                    : "event", format!("{ACTIVATE_PREFIX} 0").as_str(), "0" ;
                 }
             );
 
@@ -509,7 +507,7 @@ pub fn process(
 
             let manual_job = tree_from_tokens!(
                 &mut output_data; manual_job_source =>
-                : "mission", "System Shuffler: Manual Shuffle" ;
+                : "mission", "zzzzz System Shuffler: Manual Shuffle" ;
                 {
                     : "name", "Shuffle the universe" ;
                     : "description", format!("Shuffle all systems in the universe to one of {} presets.", settings.max_presets).as_str() ;
@@ -714,7 +712,14 @@ pub fn process(
                         : "to", "offer" ;
                         {
                             : "has", INSTALLED ;
-                            : CURRENT_PRESET, "==", preset_index ;
+                            :
+                                CURRENT_PRESET,
+                                match should_activate {
+                                    false => "!=",
+                                    true => "==",
+                                },
+                                preset_index
+                            ;
                         }
                     );
 
@@ -1270,8 +1275,8 @@ fn modify_node(
                     .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0]))
                     .unwrap(),
             ) {
-                ("remove", _) => Ordering::Less,
-                (_, "remove") => Ordering::Greater,
+                ("pos" | "remove", _) => Ordering::Less,
+                (_, "pos" | "remove") => Ordering::Greater,
                 (_, _) => Ordering::Equal,
             }
         });
@@ -1313,7 +1318,9 @@ fn conditional_events(
             }
         );
 
-        output_data.push_child(parent, event_action);
+        if should_activate {
+            output_data.push_child(parent, event_action);
+        }
 
         for &event_name in persistent_event_node_keys {
             let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
@@ -1336,14 +1343,8 @@ fn conditional_events(
 
             output_data.push_child(parent, event_branch);
 
-            let branch_or = tree_from_tokens!(
-                output_data; source =>
-                : "or" ;
-            );
-
-            output_data.push_child(event_branch, branch_or);
-            output_data.push_child(branch_or, condition1);
-            output_data.push_child(branch_or, condition2);
+            output_data.push_child(event_branch, condition1);
+            output_data.push_child(event_branch, condition2);
 
             let event_action = tree_from_tokens!(
                 output_data; source =>
@@ -1360,6 +1361,10 @@ fn conditional_events(
             );
 
             output_data.push_child(parent, event_label);
+        }
+
+        if !should_activate {
+            output_data.push_child(parent, event_action);
         }
 
         let event_label = tree_from_tokens!(
@@ -1511,11 +1516,9 @@ fn generate_side_event_conditions(
     let condition1 = tree_from_tokens!(
         output_data; shuffle_event_source =>
         :
-            match should_activate {
-                false if invert => "has",
-                false => "not",
-                true if invert => "not",
-                true => "has",
+            match invert {
+                false => "has",
+                true => "not",
             },
             format!("event: {event_name}")
         ;
