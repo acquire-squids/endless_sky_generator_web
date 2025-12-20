@@ -58,6 +58,11 @@ jobs:
           --target web target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm \
           --no-typescript \
           --out-dir "www/"
+
+    - name: Remove `.gitignore` so the wasm is deployed
+      id: bandaid
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: rm .gitignore
           
     - name: Upload static files as artifact
       id: deployment
