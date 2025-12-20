@@ -1,16 +1,10 @@
 mod full_map;
 mod import_from_javascript;
 mod system_shuffler;
-mod template;
 mod wandom;
 mod zippy;
 
 use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-pub fn generate_template(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, String> {
-    self::template::process(paths, sources).map_err(|e| e.to_string())
-}
 
 #[wasm_bindgen]
 pub fn generate_full_map(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, String> {

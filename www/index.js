@@ -1,7 +1,6 @@
 import init from "./endless_sky_generator_web.js";
 
 import {
-  generate_template,
   generate_full_map,
   generate_system_shuffler,
   SystemShufflerConfig
@@ -13,7 +12,6 @@ const wasm = await init();
 
 const input = document.getElementById("input");
 
-const template_output = document.getElementById("template-output");
 const full_map_output = document.getElementById("full-map-output");
 
 const generateAndDownload = (fileName, rustFn) => {
@@ -58,7 +56,6 @@ const generateAndDownload = (fileName, rustFn) => {
   }
 };
 
-template_output.addEventListener("click", generateAndDownload("template_plugin.zip", generate_template));
 full_map_output.addEventListener("click", generateAndDownload("full_map.zip", generate_full_map));
 
 {
