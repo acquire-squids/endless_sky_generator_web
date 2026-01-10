@@ -8,7 +8,7 @@ git clone \
   --depth=1 \
   --filter=tree:0 \
   --branch v0.10.16 \
-  git@github.com:endless-sky/endless-sky.git
+  https://github.com/endless-sky/endless-sky.git
 
 cd endless-sky/
 
