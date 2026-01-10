@@ -15,85 +15,85 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: 'recursive'
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
         
-    - uses: actions/cache@v5
-      id: cache
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/cache@v5
+        id: cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Compile data path script for deployment
-      id: compile_list_stable_data_paths
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
+      - name: Compile data path script for deployment
+        id: compile_list_stable_data_paths
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
 
-    - name: Install wasm32-unknown-unknown target
-      id: install_wasm_target
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-unknown-unknown
+      - name: Install wasm32-unknown-unknown target
+        id: install_wasm_target
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rustup target add wasm32-unknown-unknown
         
-    - name: Install wasm-bindgen
-      id: install_wasm_bindgen
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: cargo install --version =0.2.105 wasm-bindgen-cli
+      - name: Install wasm-bindgen
+        id: install_wasm_bindgen
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo install --version =0.2.105 wasm-bindgen-cli
 
-    - name: Cargo clippy
-      id: cargo_clippy
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: cargo clippy --release -- -Dwarnings
+      - name: Cargo clippy
+        id: cargo_clippy
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo clippy --release -- -Dwarnings
       
-    - name: Build
-      id: build
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: cargo build --target wasm32-unknown-unknown --release
+      - name: Build
+        id: build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo build --target wasm32-unknown-unknown --release
       
-    - name: Run wasm-bindgen
-      id: bind
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-        wasm-bindgen \
-          --target web target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm \
-          --no-typescript \
-          --out-dir "www/"
+      - name: Run wasm-bindgen
+        id: bind
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wasm-bindgen \
+            --target web target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm \
+            --no-typescript \
+            --out-dir "www/"
 
-    - name: Get stable data
-      id: acquire_data
-      uses: actions/cache@v5
-      with:
-        path: endless-sky/
-        key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
-      uses: actions/checkout@v6
-      with:
-        repository: endless-sky/endless-sky
-        ref: v0.10.16 # ideally, this would be automatic; do that later
-        path: endless-sky/
-        sparse-checkout: |
-          data
-        sparse-checkout-cone-mode: false
-      run: |
-        cp -r endless-sky/data/ www/es_stable_data/
+      - name: Get stable data
+        id: acquire_data
+        uses: actions/cache@v5
+        with:
+          path: endless-sky/
+          key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
+        uses: actions/checkout@v6
+        with:
+          repository: endless-sky/endless-sky
+          ref: v0.10.16 # ideally, this would be automatic; do that later
+          path: endless-sky/
+          sparse-checkout: |
+            data
+          sparse-checkout-cone-mode: false
+        run: |
+          cp -r endless-sky/data/ www/es_stable_data/
 
-    - name: List data paths for the page
-      id: list_stable_data_paths
-      run: ./list_stable_data_paths
+      - name: List data paths for the page
+        id: list_stable_data_paths
+        run: ./list_stable_data_paths
 
-    - name: Remove `.gitignore` so the wasm is deployed
-      id: bandaid
-      run: rm .gitignore
+      - name: Remove `.gitignore` so the wasm is deployed
+        id: bandaid
+        run: rm .gitignore
         
-    - name: Upload static files as artifact
-      id: deployment
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: www/
+      - name: Upload static files as artifact
+        id: deployment
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: www/
 
 
   deploy:
