@@ -13,6 +13,7 @@ Web version of a generator for some [Endless Sky](<https://github.com/endless-sk
 
 ## Build Instructions
 It's probably possible to build without cargo and rustup, but I wouldn't know.
+
 I use them because I am casual and unconcerned.
 
 If you have cargo and rustup:
@@ -25,6 +26,7 @@ If you have cargo and rustup:
 Steps 3 and 4 can be achieved by running `./build.sh`
 
 You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
+
 This can be done with the following commands:
 1. `git clone --no-checkout --depth=1 --filter=tree:0 https://github.com/endless-sky/endless-sky.git`
 2. `cd endless-sky/`
@@ -34,6 +36,7 @@ This can be done with the following commands:
 6. `../list_stable_data_paths`
 
 Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
+
 Steps 1 through 5 can be achieved by running `./get_stable_es_data.sh`.
 
 ## Notes
