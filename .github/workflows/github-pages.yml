@@ -64,13 +64,12 @@ jobs:
             --no-typescript \
             --out-dir "www/"
 
-      - name: Get stable data
-        id: acquire_data
-        uses: actions/cache@v5
+      - uses: actions/cache@v5
         with:
           path: endless-sky/
           key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
-        uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
         with:
           repository: endless-sky/endless-sky
           ref: v0.10.16 # ideally, this would be automatic; do that later
@@ -78,6 +77,8 @@ jobs:
           sparse-checkout: |
             data
           sparse-checkout-cone-mode: false
+
+      - name: Include stable data
         run: |
           cp -r endless-sky/data/ www/es_stable_data/
 
