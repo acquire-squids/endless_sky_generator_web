@@ -26,15 +26,15 @@ Steps 3 and 4 can be achieved by running `./build.sh`
 
 You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
 This can be done with the following commands:
-6. `git clone --no-checkout --depth=1 --filter=tree:0 https://github.com/endless-sky/endless-sky.git`
-7. `cd endless-sky/`
-8. `git sparse-checkout set --no-cone /data`
-9. `git checkout`
-10. `cp -r data/ ../www/es_stable_data/`
-11. `../list_stable_data_paths`
+1. `git clone --no-checkout --depth=1 --filter=tree:0 https://github.com/endless-sky/endless-sky.git`
+2. `cd endless-sky/`
+3. `git sparse-checkout set --no-cone /data`
+4. `git checkout`
+5. `cp -r data/ ../www/es_stable_data/`
+6. `../list_stable_data_paths`
 Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
 
-Steps 6 through 10 can be achieved by running `./get_stable_es_data.sh`.
+Steps 1 through 5 can be achieved by running `./get_stable_es_data.sh`.
 
 ## Notes
 I'll probably add a few more generators.  The initial goal was just System Shuffler.
