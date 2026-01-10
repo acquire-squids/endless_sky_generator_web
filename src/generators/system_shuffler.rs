@@ -1,4 +1,4 @@
-use crate::import_from_javascript;
+use crate::generators;
 use crate::wandom::ShuffleIndex;
 use crate::zippy::Zip;
 use endless_sky_rw::*;
@@ -7,8 +7,6 @@ use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
-    io,
-    path::PathBuf,
 };
 
 use wasm_bindgen::prelude::*;
@@ -52,28 +50,6 @@ impl SystemShufflerConfig {
             shuffle_once_on_install,
         }
     }
-}
-
-fn zip_root_nodes<P: Into<PathBuf>>(
-    archive: &mut Zip,
-    path: P,
-    data: &Data,
-    root_nodes: &[(SourceIndex, NodeIndex)],
-) -> Result<(), Box<dyn Error>> {
-    let path = P::into(path);
-
-    let mut text = String::new();
-
-    if data.write_root_nodes(&mut text, root_nodes).is_err() {
-        return Err(Box::new(io::Error::other(format!(
-            "Failed to write `{}` to string :(",
-            path.display()
-        ))));
-    }
-
-    archive.write_file(path, text.trim().as_bytes())?;
-
-    Ok(())
 }
 
 fn copy_node(
@@ -132,24 +108,7 @@ pub fn process(
     sources: Vec<String>,
     settings: SystemShufflerConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data_folder = match read_upload(paths, sources) {
-        Some((data_folder, errors)) => {
-            if !errors.is_empty() {
-                let error_string = String::from_utf8(errors)?;
-
-                import_from_javascript::error(error_string.as_str());
-            }
-
-            data_folder
-        }
-        None => {
-            return Err(Box::new(
-                io::Error::other(
-                    "ERROR: Somehow, everything went wrong while reading the data folder. You're on your own.".to_owned()
-                )
-            ));
-        }
-    };
+    let data_folder = generators::read_upload(paths, sources)?;
 
     let data = data_folder.data();
 
@@ -228,7 +187,7 @@ pub fn process(
 
         output_data.push_root_node(plugin_txt_source, plugin_version);
 
-        zip_root_nodes(
+        generators::zip_root_nodes(
             &mut archive,
             "plugin.txt",
             &output_data,
@@ -571,7 +530,7 @@ pub fn process(
             output_data.push_child(manual_job_on_accept, main_failure);
         }
 
-        zip_root_nodes(
+        generators::zip_root_nodes(
             &mut archive,
             "data/main.txt",
             &output_data,
@@ -637,7 +596,7 @@ pub fn process(
                 &persistent_nodes,
             );
 
-            zip_root_nodes(
+            generators::zip_root_nodes(
                 &mut archive,
                 format!("{preset_path}/main.txt"),
                 &output_data,
@@ -677,7 +636,7 @@ pub fn process(
                 );
             }
 
-            zip_root_nodes(
+            generators::zip_root_nodes(
                 &mut archive,
                 format!("{preset_path}/events.txt"),
                 &output_data,
@@ -756,7 +715,7 @@ pub fn process(
                 }
             }
 
-            zip_root_nodes(
+            generators::zip_root_nodes(
                 &mut archive,
                 format!("{preset_path}/missions.txt"),
                 &output_data,

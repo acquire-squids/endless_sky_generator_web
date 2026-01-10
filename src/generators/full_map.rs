@@ -1,8 +1,8 @@
-use crate::import_from_javascript;
+use crate::generators;
 use crate::zippy::Zip;
 use endless_sky_rw::*;
 
-use std::{error::Error, io};
+use std::error::Error;
 
 const PLUGIN_NAME: &str = "Full Map";
 
@@ -31,20 +31,7 @@ fn find_named_objects<'a>(
 }
 
 pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data_folder = match read_upload(paths, sources) {
-        Some((data_folder, errors)) => {
-            if !errors.is_empty() {
-                let error_string = String::from_utf8(errors)?;
-
-                import_from_javascript::error(error_string.as_str());
-            }
-
-            data_folder
-        }
-        None => {
-            return Err(Box::new(rawzip::Error::from(rawzip::ErrorKind::InvalidInput { msg: "ERROR: Somehow, everything went wrong while reading the data folder.  You're on your own.".to_owned() })));
-        }
-    };
+    let data_folder = generators::read_upload(paths, sources)?;
 
     let data = data_folder.data();
 
@@ -85,22 +72,12 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
 
         output_data.push_root_node(plugin_txt_source, plugin_version);
 
-        let mut plugin_txt = String::new();
-        let plugin_path = "plugin.txt";
-
-        if output_data
-            .write_root_nodes(
-                &mut plugin_txt,
-                &output_data.root_nodes()[output_root_node_count..],
-            )
-            .is_err()
-        {
-            return Err(Box::new(io::Error::other(format!(
-                "Failed to write `{plugin_path}` to string :("
-            ))));
-        }
-
-        archive.write_file(plugin_path, plugin_txt.trim().as_bytes())?;
+        generators::zip_root_nodes(
+            &mut archive,
+            "plugin.txt",
+            &output_data,
+            &output_data.root_nodes()[output_root_node_count..],
+        )?;
     }
 
     archive.write_dir("data/")?;
@@ -127,22 +104,12 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
 
         output_data.push_root_node(mission_txt_source, mission);
 
-        let mut mission_txt = String::new();
-        let mission_path = "data/full_map_mission.txt";
-
-        if output_data
-            .write_root_nodes(
-                &mut mission_txt,
-                &output_data.root_nodes()[output_root_node_count..],
-            )
-            .is_err()
-        {
-            return Err(Box::new(io::Error::other(format!(
-                "Failed to write `{mission_path}` to string :("
-            ))));
-        }
-
-        archive.write_file(mission_path, mission_txt.trim().as_bytes())?;
+        generators::zip_root_nodes(
+            &mut archive,
+            "data/full_map_mission.txt",
+            &output_data,
+            &output_data.root_nodes()[output_root_node_count..],
+        )?;
     }
 
     {
@@ -182,22 +149,12 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
 
         output_data.push_root_node(event_txt_source, event);
 
-        let mut event_txt = String::new();
-        let event_path = "data/full_map_event.txt";
-
-        if output_data
-            .write_root_nodes(
-                &mut event_txt,
-                &output_data.root_nodes()[output_root_node_count..],
-            )
-            .is_err()
-        {
-            return Err(Box::new(io::Error::other(format!(
-                "Failed to write `{event_path}` to string :("
-            ))));
-        }
-
-        archive.write_file(event_path, event_txt.trim().as_bytes())?;
+        generators::zip_root_nodes(
+            &mut archive,
+            "data/full_map_event.txt",
+            &output_data,
+            &output_data.root_nodes()[output_root_node_count..],
+        )?;
     }
 
     archive.finish()?;
