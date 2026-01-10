@@ -12,10 +12,6 @@ env:
 jobs:
   build:
 
-    defaults:
-      run:
-        working-directory: ./do_not_give_up_yet
-
     runs-on: ubuntu-latest
 
     steps:
@@ -33,11 +29,6 @@ jobs:
             ~/.cargo/git/db
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Compile data path script for deployment
-        id: compile_list_stable_data_paths
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: rustc -o "./list_stable_data_paths" "list_stable_data_paths.rs"
 
       - name: Install wasm32-unknown-unknown target
         id: install_wasm_target
@@ -74,21 +65,9 @@ jobs:
           path: endless-sky/
           key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
 
-      - uses: actions/checkout@v6
-        if: steps.data_cache.outputs.cache-hit != 'true'
-        with:
-          repository: endless-sky/endless-sky
-          ref: v0.10.16 # ideally, this would be automatic; do that later
-          path: endless-sky/
-          sparse-checkout: |
-            data
-          sparse-checkout-cone-mode: false
-
       - name: Include stable data
         if: steps.data_cache.outputs.cache-hit != 'true'
-        run: |
-          ./list_stable_data_paths
-          cp -r endless-sky/data/ www/es_stable_data/
+        run: ./get_es_stable_data
 
       - name: Remove `.gitignore` so the wasm is deployed
         id: bandaid
