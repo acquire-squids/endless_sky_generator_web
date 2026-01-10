@@ -68,6 +68,10 @@ jobs:
       - name: Include stable data
         if: steps.data_cache.outputs.cache-hit != 'true'
         run: ./get_stable_es_data.sh
+
+      - name: Copy stable data from cache
+        if: steps.data_cache.outputs.cache-hit == 'true'
+        run: cp -r endless-sky/data/ www/es_stable_data/
         
       - uses: actions/cache@v5
         id: list_script_cache
