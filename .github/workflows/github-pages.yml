@@ -30,6 +30,11 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Compile data path script for deployment
+      id: compile_list_stable_data_paths
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
+
     - name: Install wasm32-unknown-unknown target
       id: install_wasm_target
       if: steps.cache.outputs.cache-hit != 'true'
@@ -59,16 +64,38 @@ jobs:
           --no-typescript \
           --out-dir "www/"
 
+    - name: Get stable data
+      id: acquire_data
+      uses: actions/cache@v5
+      id: cache
+      with:
+        path: endless-sky/
+        key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
+      uses: actions/checkout@v6
+      with:
+        repository: endless-sky/endless-sky
+        ref: v0.10.16 # ideally, this would be automatic; do that later
+        path: endless-sky/
+        sparse-checkout: |
+          data
+        sparse-checkout-cone-mode: false
+      run: |
+        cp -r endless-sky/data/ www/es_stable_data/
+
+    - name: List data paths for the page
+      id: list_stable_data_paths
+      run: ./list_stable_data_paths
+
     - name: Remove `.gitignore` so the wasm is deployed
       id: bandaid
-      if: steps.cache.outputs.cache-hit != 'true'
       run: rm .gitignore
-          
+        
     - name: Upload static files as artifact
       id: deployment
       uses: actions/upload-pages-artifact@v3
       with:
         path: www/
+
 
   deploy:
     if: ${{ github.ref == 'refs/heads/main' }}

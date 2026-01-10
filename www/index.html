@@ -7,15 +7,37 @@
   </head>
   <body>
     <header>
-      <h1>Endless Sky Generator</h1>
+      <h1>Squiddy's Endless Sky Plugins Generator</h1>
     </header>
     <div>
-      <input id="input" type="file" webkitdirectory>Choose an Endless Sky data folder</input>
-    </div>
-    <div>
+      <header>
+        <h2>READ ME</h2>
+      </header>
       <p>
-        <b>After uploading your Endless Sky data folder, click the download buttons for any plugins you may be interested in.</b>
+        <b>The generators will include the base game's data for version v0.10.16 by default.</b><br/>
+        If you don't want this, uncheck the "Include data from stable release" checkbox below.<br/><br/>
+        You can also try to include your own data files, if you'd like!  Use the "Choose an Endless Sky data folder" upload button.<br/>
+        If you wish to clear the data you've "uploaded", there is a button right below the upload button.<br/><br/>
+        These settings, and the uploaded files, <b>are not stored (to my knowledge) and must be repeated if you come back!</b><br/>
       </p>
+      <div>
+        <label>Include data from stable release:</label>
+      </div>
+      <div>
+        <input id="include-defaults" type="checkbox" checked></input>
+      </div>
+      <div>
+        <label>Upload your own data folder:</label>
+      </div>
+      <div>
+        <input id="input" type="file" webkitdirectory></input>
+      </div>
+      <div>
+        <label>Clear your uploaded data folders:</label>
+      </div>
+      <div>
+        <input id="clear-uploads" type="button" value="Clear uploaded files"></input>
+      </div>
     </div>
     <div>
       <header>
