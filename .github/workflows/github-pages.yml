@@ -30,6 +30,10 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Remove `.gitignore` so the wasm is deployed
+        id: bandaid
+        run: rm .gitignore
+
       - name: Install wasm32-unknown-unknown target
         id: install_wasm_target
         if: steps.cache.outputs.cache-hit != 'true'
@@ -75,10 +79,6 @@ jobs:
         run: |
           rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
           ./list_stable_data_paths
-
-      - name: Remove `.gitignore` so the wasm is deployed
-        id: bandaid
-        run: rm .gitignore
         
       - name: Upload static files as artifact
         id: deployment
