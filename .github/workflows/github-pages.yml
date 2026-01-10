@@ -67,7 +67,7 @@ jobs:
 
       - name: Include stable data
         if: steps.data_cache.outputs.cache-hit != 'true'
-        run: ./get_es_stable_data.sh
+        run: ./get_stable_es_data.sh
 
       - name: Remove `.gitignore` so the wasm is deployed
         id: bandaid
