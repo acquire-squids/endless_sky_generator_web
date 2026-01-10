@@ -12,6 +12,10 @@ env:
 jobs:
   build:
 
+    defaults:
+      run:
+        working-directory: ./do_not_give_up_yet
+
     runs-on: ubuntu-latest
 
     steps:
