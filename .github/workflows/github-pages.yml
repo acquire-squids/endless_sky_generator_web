@@ -52,28 +52,38 @@ jobs:
       
       - name: Run wasm-bindgen
         id: bind
-        # if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           wasm-bindgen \
             --target web target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm \
             --no-typescript \
             --out-dir "www/"
 
-      # - uses: actions/cache@v5
-      #   id: data_cache
-      #   with:
-      #     path: endless-sky/
-      #     key: ${{ runner.os }}-endless-sky-${{ hashFiles('**/*.txt') }}
+      - uses: actions/cache@v5
+        id: data_cache
+        with:
+          path: endless-sky/
+          key: ${{ runner.os }}-endless-sky-${{ hashFiles('stable_version.txt') }}
 
       - name: Include stable data
-        # if: steps.data_cache.outputs.cache-hit != 'true'
+        if: steps.data_cache.outputs.cache-hit != 'true'
         run: ./get_stable_es_data.sh
         
-      - name: List stable data paths
-        id: list_stable_data_paths
-        # if: steps.cache.outputs.cache-hit != 'true'
+      - uses: actions/cache@v5
+        id: list_script_cache
+        with:
+          path: ./list_stable_data_paths
+          key: ${{ runner.os }}-list_script_cache-${{ hashFiles('list_stable_data_paths.rs') }}
+
+      - name: Compile list script
+        id: list_script_compile
+        if: steps.list_script_cache.outputs.cache-hit != 'true'
         run: |
           rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
+
+      - name: List stable data paths
+        id: list_stable_data_paths
+        run: |
           ./list_stable_data_paths
 
       - name: Remove `.gitignore` so the wasm is deployed
