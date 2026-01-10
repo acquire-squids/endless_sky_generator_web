@@ -32,8 +32,8 @@ This can be done with the following commands:
 4. `git checkout`
 5. `cp -r data/ ../www/es_stable_data/`
 6. `../list_stable_data_paths`
-Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
 
+Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
 Steps 1 through 5 can be achieved by running `./get_stable_es_data.sh`.
 
 ## Notes
