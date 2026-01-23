@@ -3,7 +3,7 @@ pub mod system_shuffler;
 
 use crate::import_from_javascript;
 use crate::zippy::Zip;
-use endless_sky_rw::{self, *};
+use endless_sky_rw::{self, Data, DataFolder, NodeIndex, SourceIndex};
 
 use std::{error::Error, io, path::PathBuf};
 

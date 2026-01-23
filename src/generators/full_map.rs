@@ -1,8 +1,11 @@
 use crate::generators;
 use crate::zippy::Zip;
-use endless_sky_rw::*;
 
-use std::error::Error;
+use endless_sky_rw::{
+    Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter, tree_from_tokens,
+};
+
+use std::{error::Error, path::PathBuf};
 
 const PLUGIN_NAME: &str = "Full Map";
 
@@ -35,59 +38,84 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
 
     let data = data_folder.data();
 
-    let mut output_data = Data::default();
-
     let mut output = vec![];
 
-    let mut archive = Zip::new(&mut output);
+    let mut generator = FullMap {
+        archive: Zip::new(&mut output),
+        output_data: Data::default(),
+    };
 
-    {
-        let output_root_node_count = output_data.root_nodes().len();
-        let plugin_txt_source = output_data.insert_source(String::new());
+    generator.description()?;
+
+    generator.archive.write_dir("data/")?;
+
+    generator.main_mission()?;
+
+    generator.main_event(data)?;
+
+    generator.archive.finish()?;
+
+    Ok(output)
+}
+
+struct FullMap<'a> {
+    archive: Zip<'a>,
+    output_data: Data,
+}
+
+impl FullMap<'_> {
+    fn zip_root_nodes<P: Into<PathBuf>>(
+        &mut self,
+        path: P,
+        from: usize,
+    ) -> Result<(), Box<dyn Error>> {
+        generators::zip_root_nodes(
+            &mut self.archive,
+            path,
+            &self.output_data,
+            &self.output_data.root_nodes()[from..],
+        )
+    }
+
+    fn description(&mut self) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+        let plugin_txt_source = self.output_data.insert_source(String::new());
 
         let plugin_name = tree_from_tokens!(
-            &mut output_data; plugin_txt_source =>
+            &mut self.output_data; plugin_txt_source =>
             : "name", PLUGIN_NAME ;
         );
 
-        output_data.push_root_node(plugin_txt_source, plugin_name);
+        self.output_data
+            .push_root_node(plugin_txt_source, plugin_name);
 
-        let mut plugin_description = vec![];
-
-        for about in PLUGIN_DESCRIPTION.lines().map(|t| t.trim()) {
+        for about in PLUGIN_DESCRIPTION.lines().map(str::trim) {
             let plugin_about = tree_from_tokens!(
-                &mut output_data; plugin_txt_source =>
+                &mut self.output_data; plugin_txt_source =>
                 : "about", about ;
             );
 
-            plugin_description.push(plugin_about);
-
-            output_data.push_root_node(plugin_txt_source, plugin_about);
+            self.output_data
+                .push_root_node(plugin_txt_source, plugin_about);
         }
 
         let plugin_version = tree_from_tokens!(
-            &mut output_data; plugin_txt_source =>
+            &mut self.output_data; plugin_txt_source =>
             : "version", PLUGIN_VERSION ;
         );
 
-        output_data.push_root_node(plugin_txt_source, plugin_version);
+        self.output_data
+            .push_root_node(plugin_txt_source, plugin_version);
 
-        generators::zip_root_nodes(
-            &mut archive,
-            "plugin.txt",
-            &output_data,
-            &output_data.root_nodes()[output_root_node_count..],
-        )?;
+        self.zip_root_nodes("plugin.txt", output_root_node_count)
     }
 
-    archive.write_dir("data/")?;
-
-    {
-        let output_root_node_count = output_data.root_nodes().len();
-        let mission_txt_source = output_data.insert_source(String::new());
+    fn main_mission(&mut self) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+        let mission_txt_source = self.output_data.insert_source(String::new());
 
         let mission = tree_from_tokens!(
-            &mut output_data; mission_txt_source =>
+            &mut self.output_data; mission_txt_source =>
             : "mission", format!("Full Map: I know where everything is now") ;
             {
                 : "name", "Map Reveal" ;
@@ -102,22 +130,17 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
             }
         );
 
-        output_data.push_root_node(mission_txt_source, mission);
+        self.output_data.push_root_node(mission_txt_source, mission);
 
-        generators::zip_root_nodes(
-            &mut archive,
-            "data/full_map_mission.txt",
-            &output_data,
-            &output_data.root_nodes()[output_root_node_count..],
-        )?;
+        self.zip_root_nodes("data/full_map_mission.txt", output_root_node_count)
     }
 
-    {
-        let output_root_node_count = output_data.root_nodes().len();
-        let event_txt_source = output_data.insert_source(String::new());
+    fn main_event(&mut self, data: &Data) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+        let event_txt_source = self.output_data.insert_source(String::new());
 
         let event = tree_from_tokens!(
-            &mut output_data; event_txt_source =>
+            &mut self.output_data; event_txt_source =>
             : "event", format!("Full Map: I know where everything is now") ;
         );
 
@@ -129,35 +152,26 @@ pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<
         .filter(|(_, node_index)| data.get_tokens(*node_index).unwrap_or_default().len() >= 2)
         {
             let visit_system = tree_from_tokens!(
-                &mut output_data; event_txt_source =>
-                : "visit", data.get_tokens(system).and_then(|t| data.get_lexeme(source_index, t[1])).unwrap() ;
+                &mut self.output_data; event_txt_source =>
+                : "visit", data.get_tokens(system).and_then(|t| data.get_lexeme(source_index, t[1])).expect("The iterator should have a filter applied such that only nodes with two or more tokens are allowed") ;
             );
 
-            output_data.push_child(event, visit_system);
+            self.output_data.push_child(event, visit_system);
 
             find_named_objects(data, source_index, system, &mut planet_names);
         }
 
         for planet_name in planet_names {
             let visit_system = tree_from_tokens!(
-                &mut output_data; event_txt_source =>
+                &mut self.output_data; event_txt_source =>
                 : "visit planet", planet_name ;
             );
 
-            output_data.push_child(event, visit_system);
+            self.output_data.push_child(event, visit_system);
         }
 
-        output_data.push_root_node(event_txt_source, event);
+        self.output_data.push_root_node(event_txt_source, event);
 
-        generators::zip_root_nodes(
-            &mut archive,
-            "data/full_map_event.txt",
-            &output_data,
-            &output_data.root_nodes()[output_root_node_count..],
-        )?;
+        self.zip_root_nodes("data/full_map_event.txt", output_root_node_count)
     }
-
-    archive.finish()?;
-
-    Ok(output)
 }

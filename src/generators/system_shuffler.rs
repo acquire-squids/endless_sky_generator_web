@@ -1,12 +1,16 @@
 use crate::generators;
 use crate::wandom::ShuffleIndex;
 use crate::zippy::Zip;
-use endless_sky_rw::*;
+
+use endless_sky_rw::{
+    Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter, tree_from_tokens,
+};
 
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
+    path::PathBuf,
 };
 
 use wasm_bindgen::prelude::*;
@@ -35,6 +39,7 @@ pub struct SystemShufflerConfig {
 #[wasm_bindgen]
 impl SystemShufflerConfig {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn new(
         seed: usize,
         max_presets: u8,
@@ -103,6 +108,12 @@ fn copy_node(
     Some(output_node)
 }
 
+struct SystemShuffler<'a> {
+    archive: Zip<'a>,
+    output_data: Data,
+    settings: SystemShufflerConfig,
+}
+
 pub fn process(
     paths: Vec<String>,
     sources: Vec<String>,
@@ -112,88 +123,15 @@ pub fn process(
 
     let data = data_folder.data();
 
-    let mut output_data = Data::default();
-
     let mut output = vec![];
 
-    let mut archive = Zip::new(&mut output);
+    let mut generator = SystemShuffler {
+        archive: Zip::new(&mut output),
+        output_data: Data::default(),
+        settings,
+    };
 
-    {
-        let plugin_description_txt = format!(
-            "\
-            An Endless Sky \"no logic\" location randomizer.\n\
-            \n\n\
-            \
-            {}\
-            - PRNG seed: {}\n\
-            - {} possible universe presets\n\
-            {}\
-            {}
-            ",
-            if settings.shuffle_once_on_install {
-                "In addition to shuffling once immediately upon installation, this plugin was generated with the following settings:\n"
-            } else {
-                "This plugin was generated with the following settings:\n"
-            },
-            settings.seed,
-            settings.max_presets,
-            if settings.shuffle_chance > 0 {
-                format!(
-                    "- A {}% chance to shuffle to a different preset every time you land\n",
-                    settings.shuffle_chance
-                )
-            } else {
-                "".to_owned()
-            },
-            if settings.fixed_shuffle_days > 0 {
-                format!(
-                    "- A guaranteed shuffle roughly once every {} days\n",
-                    settings.fixed_shuffle_days
-                )
-            } else {
-                "".to_owned()
-            },
-        );
-
-        let output_root_node_count = output_data.root_nodes().len();
-        let plugin_txt_source = output_data.insert_source(String::new());
-
-        let plugin_name = tree_from_tokens!(
-            &mut output_data; plugin_txt_source =>
-            : "name", PLUGIN_NAME ;
-        );
-
-        output_data.push_root_node(plugin_txt_source, plugin_name);
-
-        let mut plugin_description = vec![];
-
-        for about in plugin_description_txt.lines().map(|t| t.trim()) {
-            if !about.is_empty() {
-                let plugin_about = tree_from_tokens!(
-                    &mut output_data; plugin_txt_source =>
-                    : "about", about ;
-                );
-
-                plugin_description.push(plugin_about);
-
-                output_data.push_root_node(plugin_txt_source, plugin_about);
-            }
-        }
-
-        let plugin_version = tree_from_tokens!(
-            &mut output_data; plugin_txt_source =>
-            : "version", PLUGIN_VERSION ;
-        );
-
-        output_data.push_root_node(plugin_txt_source, plugin_version);
-
-        generators::zip_root_nodes(
-            &mut archive,
-            "plugin.txt",
-            &output_data,
-            &output_data.root_nodes()[output_root_node_count..],
-        )?;
-    }
+    generator.description()?;
 
     let mut system_names = HashSet::new();
 
@@ -212,59 +150,568 @@ pub fn process(
         &mut persistent_nodes,
     );
 
-    let mut persistent_event_nodes = HashMap::new();
-
-    for (source_index, node_index) in
-        node_path_iter!(&data; "event").filter(|&(source_index, node_index)| {
-            data.get_tokens(node_index).unwrap_or_default().len() >= 2
-                && !data
-                    .get_children(node_index)
-                    .unwrap_or_default()
-                    .is_empty()
-                && node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
-                    .next()
-                    .is_some()
-        })
-    {
-        let event_name = data
-            .get_tokens(node_index)
-            .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
-            .unwrap();
-
-        let mut event_map = HashMap::new();
-
-        data_from_node(
-            data,
-            node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
-                .map(|n| (source_index, n)),
-            &mut system_names,
-            (&mut planets, &mut wormholes),
-            &mut event_map,
-        );
-
-        if !event_map.is_empty() {
-            persistent_event_nodes.insert(event_name, event_map);
-        }
-    }
+    let persistent_event_nodes =
+        find_persistent_event_nodes(data, &mut system_names, &mut planets, &mut wormholes);
 
     let mut system_names = system_names.into_iter().collect::<Vec<_>>();
 
-    system_names.sort();
+    system_names.sort_unstable();
+
+    let mut persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
 
     // TODO: sort events by when they happen chronologically?
-    let persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
+    persistent_event_node_keys.sort_unstable();
 
-    archive.write_dir("data/")?;
+    generator.archive.write_dir("data/")?;
 
-    {
-        let output_root_node_count = output_data.root_nodes().len();
+    generator.main_data(persistent_event_node_keys.as_slice())?;
+
+    generator.archive.write_dir("data/presets/")?;
+
+    for preset_index in 0..=(settings.max_presets) {
+        generator.preset(
+            data,
+            preset_index,
+            system_names.as_slice(),
+            &persistent_nodes,
+            (&persistent_event_node_keys, &persistent_event_nodes),
+        )?;
+    }
+
+    generator.archive.finish()?;
+
+    Ok(output)
+}
+
+impl SystemShuffler<'_> {
+    fn zip_root_nodes<P: Into<PathBuf>>(
+        &mut self,
+        path: P,
+        from: usize,
+    ) -> Result<(), Box<dyn Error>> {
+        generators::zip_root_nodes(
+            &mut self.archive,
+            path,
+            &self.output_data,
+            &self.output_data.root_nodes()[from..],
+        )
+    }
+
+    fn description(&mut self) -> Result<(), Box<dyn Error>> {
+        let plugin_description_txt = format!(
+            "\
+            An Endless Sky \"no logic\" location randomizer.\n\
+            \n\n\
+            \
+            {}\
+            - PRNG seed: {}\n\
+            - {} possible universe presets\n\
+            {}\
+            {}
+            ",
+            if self.settings.shuffle_once_on_install {
+                "In addition to shuffling once immediately upon installation, this plugin was generated with the following settings:\n"
+            } else {
+                "This plugin was generated with the following settings:\n"
+            },
+            self.settings.seed,
+            self.settings.max_presets,
+            if self.settings.shuffle_chance > 0 {
+                format!(
+                    "- A {}% chance to shuffle to a different preset every time you land\n",
+                    self.settings.shuffle_chance
+                )
+            } else {
+                String::new()
+            },
+            if self.settings.fixed_shuffle_days > 0 {
+                format!(
+                    "- A guaranteed shuffle roughly once every {} days\n",
+                    self.settings.fixed_shuffle_days
+                )
+            } else {
+                String::new()
+            },
+        );
+
+        let output_root_node_count = self.output_data.root_nodes().len();
+        let plugin_txt_source = self.output_data.insert_source(String::new());
+
+        let plugin_name = tree_from_tokens!(
+            &mut self.output_data; plugin_txt_source =>
+            : "name", PLUGIN_NAME ;
+        );
+
+        self.output_data
+            .push_root_node(plugin_txt_source, plugin_name);
+
+        for about in plugin_description_txt.lines().map(str::trim) {
+            if !about.is_empty() {
+                let plugin_about = tree_from_tokens!(
+                    &mut self.output_data; plugin_txt_source =>
+                    : "about", about ;
+                );
+
+                self.output_data
+                    .push_root_node(plugin_txt_source, plugin_about);
+            }
+        }
+
+        let plugin_version = tree_from_tokens!(
+            &mut self.output_data; plugin_txt_source =>
+            : "version", PLUGIN_VERSION ;
+        );
+
+        self.output_data
+            .push_root_node(plugin_txt_source, plugin_version);
+
+        self.zip_root_nodes("plugin.txt", output_root_node_count)
+    }
+
+    fn main_data(&mut self, persistent_event_node_keys: &[&str]) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+
+        self.main_mission(persistent_event_node_keys);
+
+        self.restore_job(persistent_event_node_keys);
+
+        self.manual_trigger(persistent_event_node_keys);
+
+        self.zip_root_nodes("data/main.txt", output_root_node_count)
+    }
+
+    fn main_mission(&mut self, persistent_event_node_keys: &[&str]) {
+        let main_mission_source = self.output_data.insert_source(String::new());
+
+        let main_mission = tree_from_tokens!(
+            &mut self.output_data; main_mission_source =>
+            : "mission", "zzzzz System Shuffler: Select Preset" ;
+            {
+                : "invisible" ;
+                : "repeat" ;
+                : "non-blocking" ;
+                : "landing" ;
+                : "offer precedence", "-1000000" ;
+            }
+        );
+
+        self.output_data
+            .push_root_node(main_mission_source, main_mission);
+
+        let main_mission_to_offer = tree_from_tokens!(
+            &mut self.output_data; main_mission_source =>
+            : "to", "offer" ;
+        );
+
+        self.output_data
+            .push_child(main_mission, main_mission_to_offer);
+
+        if self.settings.shuffle_chance == 0
+            && self.settings.fixed_shuffle_days == 0
+            && !self.settings.shuffle_once_on_install
+        {
+            let main_mission_never = tree_from_tokens!(
+                &mut self.output_data; main_mission_source =>
+                : "never" ;
+            );
+
+            self.output_data
+                .push_child(main_mission_to_offer, main_mission_never);
+        } else {
+            let main_mission_to_offer_or = tree_from_tokens!(
+                &mut self.output_data; main_mission_source =>
+                : "or" ;
+            );
+
+            self.output_data
+                .push_child(main_mission_to_offer, main_mission_to_offer_or);
+
+            if self.settings.shuffle_chance > 0 {
+                let random_chance = tree_from_tokens!(
+                    &mut self.output_data; main_mission_source =>
+                    : "random", "<", self.settings.shuffle_chance ;
+                );
+
+                self.output_data
+                    .push_child(main_mission_to_offer_or, random_chance);
+            }
+
+            if self.settings.fixed_shuffle_days > 0 {
+                let guaranteed = tree_from_tokens!(
+                    &mut self.output_data; main_mission_source =>
+                    : "days since epoch", ">=", "(", LAST_SHUFFLE_DAY, "+", self.settings.fixed_shuffle_days, ")" ;
+                );
+
+                self.output_data
+                    .push_child(main_mission_to_offer_or, guaranteed);
+            }
+
+            if self.settings.shuffle_once_on_install {
+                let first_time = tree_from_tokens!(
+                    &mut self.output_data; main_mission_source =>
+                    : "not", INSTALLED ;
+                );
+
+                self.output_data
+                    .push_child(main_mission_to_offer_or, first_time);
+            }
+        }
+
+        let main_mission_on_offer = tree_from_tokens!(
+            &mut self.output_data; main_mission_source =>
+            : "on", "offer" ;
+        );
+
+        self.output_data
+            .push_child(main_mission, main_mission_on_offer);
+
+        let main_mission_conversation = tree_from_tokens!(
+            &mut self.output_data; main_mission_source =>
+            : "conversation" ;
+            {
+                : "The universe has shuffled. Good luck." ;
+            }
+        );
+
+        self.output_data
+            .push_child(main_mission_on_offer, main_mission_conversation);
+
+        self.conditional_events(
+            (main_mission_source, main_mission_conversation),
+            (false, RESTORE_PREFIX, "restore"),
+            persistent_event_node_keys,
+        );
+
+        let preset_selection = self.select_preset(main_mission_source, false);
+
+        self.output_data
+            .push_child(main_mission_conversation, preset_selection);
+
+        self.conditional_events(
+            (main_mission_source, main_mission_conversation),
+            (true, ACTIVATE_PREFIX, "activate"),
+            persistent_event_node_keys,
+        );
+
+        let main_failure = tree_from_tokens!(
+            &mut self.output_data; main_mission_source =>
+            : "fail" ;
+        );
+
+        self.output_data
+            .push_child(main_mission_on_offer, main_failure);
+    }
+
+    fn select_preset(&mut self, source: SourceIndex, reset: bool) -> NodeIndex {
+        if reset {
+            tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "action" ;
+                {
+                    : INSTALLED, "=", "1" ;
+                    : CURRENT_PRESET, "=", "0" ;
+                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
+                }
+            )
+        } else {
+            tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "action" ;
+                {
+                    : INSTALLED, "=", "1" ;
+                    : CURRENT_PRESET, "=", "(", format!("roll: {}", self.settings.max_presets).as_str(), "+", "1", ")" ;
+                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
+                }
+            )
+        }
+    }
+
+    fn restore_job(&mut self, persistent_event_node_keys: &[&str]) {
+        let restore_job_source = self.output_data.insert_source(String::new());
+
+        let restore_job = tree_from_tokens!(
+            &mut self.output_data; restore_job_source =>
+            : "mission", "zzzzz System Shuffler: Restore Universe" ;
+            {
+                : "name", "Unshuffle the universe" ;
+                : "description", "Restore all systems in the universe to how they should be, free of charge." ;
+                : "repeat" ;
+                : "job" ;
+            }
+        );
+
+        self.output_data
+            .push_root_node(restore_job_source, restore_job);
+
+        let restore_job_to_offer = tree_from_tokens!(
+            &mut self.output_data; restore_job_source =>
+            : "to", "offer" ;
+            {
+                : CURRENT_PRESET, "!=", "0" ;
+            }
+        );
+
+        self.output_data
+            .push_child(restore_job, restore_job_to_offer);
+
+        let restore_job_on_accept = tree_from_tokens!(
+            &mut self.output_data; restore_job_source =>
+            : "on", "accept" ;
+        );
+
+        self.output_data
+            .push_child(restore_job, restore_job_on_accept);
+
+        let restore_job_conversation = tree_from_tokens!(
+            &mut self.output_data; restore_job_source =>
+            : "conversation" ;
+            {
+                : "As per your request, the universe has been restored." ;
+            }
+        );
+
+        self.output_data
+            .push_child(restore_job_on_accept, restore_job_conversation);
+
+        self.conditional_events(
+            (restore_job_source, restore_job_conversation),
+            (false, RESTORE_PREFIX, "restore"),
+            persistent_event_node_keys,
+        );
+
+        let preset_selection = self.select_preset(restore_job_source, true);
+
+        self.output_data
+            .push_child(restore_job_conversation, preset_selection);
+
+        self.conditional_events(
+            (restore_job_source, restore_job_conversation),
+            (true, ACTIVATE_PREFIX, "activate"),
+            persistent_event_node_keys,
+        );
+
+        let main_failure = tree_from_tokens!(
+            &mut self.output_data; restore_job_source =>
+            : "fail" ;
+        );
+
+        self.output_data
+            .push_child(restore_job_on_accept, main_failure);
+    }
+
+    fn manual_trigger(&mut self, persistent_event_node_keys: &[&str]) {
+        let manual_job_source = self.output_data.insert_source(String::new());
+
+        let manual_job = tree_from_tokens!(
+            &mut self.output_data; manual_job_source =>
+            : "mission", "zzzzz System Shuffler: Manual Shuffle" ;
+            {
+                : "name", "Shuffle the universe" ;
+                : "description", format!("Shuffle all systems in the universe to one of {} presets.", self.settings.max_presets).as_str() ;
+                : "repeat" ;
+                : "job" ;
+            }
+        );
+
+        self.output_data
+            .push_root_node(manual_job_source, manual_job);
+
+        let manual_job_on_accept = tree_from_tokens!(
+            &mut self.output_data; manual_job_source =>
+            : "on", "accept" ;
+        );
+
+        self.output_data
+            .push_child(manual_job, manual_job_on_accept);
+
+        let manual_job_conversation = tree_from_tokens!(
+            &mut self.output_data; manual_job_source =>
+            : "conversation" ;
+            {
+                : "As per your request, the universe has shuffled. Good luck." ;
+            }
+        );
+
+        self.output_data
+            .push_child(manual_job_on_accept, manual_job_conversation);
+
+        self.conditional_events(
+            (manual_job_source, manual_job_conversation),
+            (false, RESTORE_PREFIX, "restore"),
+            persistent_event_node_keys,
+        );
+
+        let preset_selection = self.select_preset(manual_job_source, false);
+
+        self.output_data
+            .push_child(manual_job_conversation, preset_selection);
+
+        self.conditional_events(
+            (manual_job_source, manual_job_conversation),
+            (true, ACTIVATE_PREFIX, "activate"),
+            persistent_event_node_keys,
+        );
+
+        let main_failure = tree_from_tokens!(
+            &mut self.output_data; manual_job_source =>
+            : "fail" ;
+        );
+
+        self.output_data
+            .push_child(manual_job_on_accept, main_failure);
+    }
+
+    fn preset(
+        &mut self,
+        data: &Data,
+        preset_index: u8,
+        system_names: &[&str],
+        persistent_nodes: &PersistentOriginalNodes<'_>,
+        (persistent_event_node_keys, persistent_event_nodes): (
+            &[&str],
+            &HashMap<&str, PersistentOriginalNodes<'_>>,
+        ),
+    ) -> Result<(), Box<dyn Error>> {
+        let preset_index = usize::from(preset_index);
+
+        let shuffle_event_source = self.output_data.insert_source(String::new());
+
+        let system_swaps = self.get_system_swaps(system_names, preset_index);
+
+        let preset_path = format!("data/presets/universe_preset_{preset_index}");
+
+        self.archive.write_dir(format!("{preset_path}/"))?;
+
+        let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
+        let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
 
         {
-            let main_mission_source = output_data.insert_source(String::new());
+            let output_root_node_count = self.output_data.root_nodes().len();
 
-            let main_mission = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
-                : "mission", "zzzzz System Shuffler: Select Preset" ;
+            self.preset_event(
+                data,
+                shuffle_event_source,
+                &system_swaps,
+                persistent_nodes,
+                (restore_name.as_str(), activate_name.as_str()),
+            );
+
+            self.zip_root_nodes(format!("{preset_path}/main.txt"), output_root_node_count)?;
+        }
+
+        {
+            let output_root_node_count = self.output_data.root_nodes().len();
+
+            for (event_name, event_map) in persistent_event_node_keys.iter().map(|&e| {
+                (
+                    e,
+                    persistent_event_nodes
+                        .get(e)
+                        .expect("An event node should never be in the keys list if it is not real"),
+                )
+            }) {
+                self.preset_event(
+                    data,
+                    shuffle_event_source,
+                    &system_swaps,
+                    event_map,
+                    (
+                        format!("{restore_name}: {event_name}").as_str(),
+                        format!("{activate_name}: {event_name}").as_str(),
+                    ),
+                );
+            }
+
+            self.zip_root_nodes(format!("{preset_path}/events.txt"), output_root_node_count)?;
+        }
+
+        {
+            let output_root_node_count = self.output_data.root_nodes().len();
+
+            for &event_name in persistent_event_nodes.keys() {
+                self.backpatch_mission(
+                    shuffle_event_source,
+                    preset_index,
+                    event_name,
+                    (restore_name.as_str(), activate_name.as_str()),
+                );
+            }
+
+            self.zip_root_nodes(
+                format!("{preset_path}/missions.txt"),
+                output_root_node_count,
+            )
+        }
+    }
+
+    fn get_system_swaps<'a>(
+        &self,
+        system_names: &[&'a str],
+        preset_index: usize,
+    ) -> HashMap<&'a str, &'a str> {
+        let shuffled = if preset_index == 0 {
+            (0..(system_names.len()))
+                .map(|i| system_names[i])
+                .collect::<Vec<_>>()
+        } else {
+            system_names
+                .shuffled_indices(self.settings.seed.wrapping_add(preset_index))
+                .into_iter()
+                .map(|i| system_names[i])
+                .collect::<Vec<_>>()
+        };
+
+        system_names
+            .iter()
+            .copied()
+            .zip(shuffled)
+            .collect::<HashMap<_, _>>()
+    }
+
+    fn preset_event(
+        &mut self,
+        data: &Data,
+        shuffle_event_source: SourceIndex,
+        system_swaps: &HashMap<&str, &str>,
+        persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
+        (restore_name, activate_name): (&str, &str),
+    ) {
+        let shuffle_event_restore = tree_from_tokens!(
+            &mut self.output_data; shuffle_event_source =>
+            : "event", restore_name ;
+        );
+
+        self.output_data
+            .push_root_node(shuffle_event_source, shuffle_event_restore);
+
+        let shuffle_event_activate = tree_from_tokens!(
+            &mut self.output_data; shuffle_event_source =>
+            : "event", activate_name ;
+        );
+
+        self.output_data
+            .push_root_node(shuffle_event_source, shuffle_event_activate);
+
+        self.event(
+            data,
+            shuffle_event_source,
+            (shuffle_event_restore, shuffle_event_activate),
+            system_swaps,
+            persistent_nodes,
+        );
+    }
+
+    fn backpatch_mission(
+        &mut self,
+        shuffle_event_source: SourceIndex,
+        preset_index: usize,
+        event_name: &str,
+        (restore_name, activate_name): (&str, &str),
+    ) {
+        for (should_activate, kind_name) in [(false, restore_name), (true, activate_name)] {
+            let shuffle_mission = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : "mission", format!("zzzzz {kind_name}: {event_name}") ;
                 {
                     : "invisible" ;
                     : "repeat" ;
@@ -274,464 +721,662 @@ pub fn process(
                 }
             );
 
-            output_data.push_root_node(main_mission_source, main_mission);
+            self.output_data
+                .push_root_node(shuffle_event_source, shuffle_mission);
 
-            let main_mission_to_offer = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
+            let mission_to_offer = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
                 : "to", "offer" ;
+                {
+                    : "has", INSTALLED ;
+                    :
+                        CURRENT_PRESET,
+                        if should_activate {
+                            "=="
+                        } else {
+                            "!="
+                        },
+                        preset_index
+                    ;
+                }
             );
 
-            output_data.push_child(main_mission, main_mission_to_offer);
+            self.output_data
+                .push_child(shuffle_mission, mission_to_offer);
 
-            if settings.shuffle_chance == 0
-                && settings.fixed_shuffle_days == 0
-                && !settings.shuffle_once_on_install
-            {
-                let main_mission_never = tree_from_tokens!(
-                    &mut output_data; main_mission_source =>
-                    : "never" ;
-                );
-
-                output_data.push_child(main_mission_to_offer, main_mission_never);
-            } else {
-                let main_mission_to_offer_or = tree_from_tokens!(
-                    &mut output_data; main_mission_source =>
-                    : "or" ;
-                );
-
-                output_data.push_child(main_mission_to_offer, main_mission_to_offer_or);
-
-                if settings.shuffle_chance > 0 {
-                    let random_chance = tree_from_tokens!(
-                        &mut output_data; main_mission_source =>
-                        : "random", "<", settings.shuffle_chance ;
-                    );
-
-                    output_data.push_child(main_mission_to_offer_or, random_chance);
-                }
-
-                if settings.fixed_shuffle_days > 0 {
-                    let guaranteed = tree_from_tokens!(
-                        &mut output_data; main_mission_source =>
-                        : "days since epoch", ">=", "(", LAST_SHUFFLE_DAY, "+", settings.fixed_shuffle_days, ")" ;
-                    );
-
-                    output_data.push_child(main_mission_to_offer_or, guaranteed);
-                }
-
-                if settings.shuffle_once_on_install {
-                    let first_time = tree_from_tokens!(
-                        &mut output_data; main_mission_source =>
-                        : "not", INSTALLED ;
-                    );
-
-                    output_data.push_child(main_mission_to_offer_or, first_time);
-                }
-            }
-
-            let main_mission_on_offer = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
+            let mission_on_offer = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
                 : "on", "offer" ;
             );
 
-            output_data.push_child(main_mission, main_mission_on_offer);
+            self.output_data
+                .push_child(shuffle_mission, mission_on_offer);
 
-            let main_mission_conversation = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
-                : "conversation" ;
-                {
-                    : "The universe has shuffled. Good luck." ;
-                }
+            let ((condition1, condition2), (action1, action2)) = self.side_event_conditions(
+                event_name,
+                (restore_name, activate_name),
+                (should_activate, false),
+                shuffle_event_source,
             );
 
-            output_data.push_child(main_mission_on_offer, main_mission_conversation);
+            self.output_data.push_child(mission_to_offer, condition1);
+            self.output_data.push_child(mission_to_offer, condition2);
 
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (main_mission_source, main_mission_conversation),
-                (false, RESTORE_PREFIX, "restore"),
-                persistent_event_node_keys.as_slice(),
-            );
+            self.output_data.push_child(mission_on_offer, action1);
+            self.output_data.push_child(mission_on_offer, action2);
 
-            let preset_selection = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
-                : "action" ;
-                {
-                    : INSTALLED, "=", "1" ;
-                    : CURRENT_PRESET, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
-                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
-                }
-            );
-
-            output_data.push_child(main_mission_conversation, preset_selection);
-
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (main_mission_source, main_mission_conversation),
-                (true, ACTIVATE_PREFIX, "activate"),
-                persistent_event_node_keys.as_slice(),
-            );
-
-            let main_failure = tree_from_tokens!(
-                &mut output_data; main_mission_source =>
+            let mission_failure = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
                 : "fail" ;
             );
 
-            output_data.push_child(main_mission_on_offer, main_failure);
+            self.output_data
+                .push_child(mission_on_offer, mission_failure);
         }
-
-        {
-            let restore_job_source = output_data.insert_source(String::new());
-
-            let restore_job = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "mission", "zzzzz System Shuffler: Restore Universe" ;
-                {
-                    : "name", "Unshuffle the universe" ;
-                    : "description", "Restore all systems in the universe to how they should be, free of charge." ;
-                    : "repeat" ;
-                    : "job" ;
-                }
-            );
-
-            output_data.push_root_node(restore_job_source, restore_job);
-
-            let restore_job_to_offer = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "to", "offer" ;
-                {
-                    : CURRENT_PRESET, "!=", "0" ;
-                }
-            );
-
-            output_data.push_child(restore_job, restore_job_to_offer);
-
-            let restore_job_on_accept = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "on", "accept" ;
-            );
-
-            output_data.push_child(restore_job, restore_job_on_accept);
-
-            let restore_job_conversation = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "conversation" ;
-                {
-                    : "As per your request, the universe has been restored." ;
-                }
-            );
-
-            output_data.push_child(restore_job_on_accept, restore_job_conversation);
-
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (restore_job_source, restore_job_conversation),
-                (false, RESTORE_PREFIX, "restore"),
-                persistent_event_node_keys.as_slice(),
-            );
-
-            let preset_selection = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "action" ;
-                {
-                    : INSTALLED, "=", "1" ;
-                    : CURRENT_PRESET, "=", "0" ;
-                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
-                }
-            );
-
-            output_data.push_child(restore_job_conversation, preset_selection);
-
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (restore_job_source, restore_job_conversation),
-                (true, ACTIVATE_PREFIX, "activate"),
-                persistent_event_node_keys.as_slice(),
-            );
-
-            let main_failure = tree_from_tokens!(
-                &mut output_data; restore_job_source =>
-                : "fail" ;
-            );
-
-            output_data.push_child(restore_job_on_accept, main_failure);
-        }
-
-        {
-            let manual_job_source = output_data.insert_source(String::new());
-
-            let manual_job = tree_from_tokens!(
-                &mut output_data; manual_job_source =>
-                : "mission", "zzzzz System Shuffler: Manual Shuffle" ;
-                {
-                    : "name", "Shuffle the universe" ;
-                    : "description", format!("Shuffle all systems in the universe to one of {} presets.", settings.max_presets).as_str() ;
-                    : "repeat" ;
-                    : "job" ;
-                }
-            );
-
-            output_data.push_root_node(manual_job_source, manual_job);
-
-            let manual_job_on_accept = tree_from_tokens!(
-                &mut output_data; manual_job_source =>
-                : "on", "accept" ;
-            );
-
-            output_data.push_child(manual_job, manual_job_on_accept);
-
-            let manual_job_conversation = tree_from_tokens!(
-                &mut output_data; manual_job_source =>
-                : "conversation" ;
-                {
-                    : "As per your request, the universe has shuffled. Good luck." ;
-                }
-            );
-
-            output_data.push_child(manual_job_on_accept, manual_job_conversation);
-
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (manual_job_source, manual_job_conversation),
-                (false, RESTORE_PREFIX, "restore"),
-                persistent_event_node_keys.as_slice(),
-            );
-
-            let preset_selection = tree_from_tokens!(
-                &mut output_data; manual_job_source =>
-                : "action" ;
-                {
-                    : INSTALLED, "=", "1" ;
-                    : CURRENT_PRESET, "=", "(", format!("roll: {}", settings.max_presets).as_str(), "+", "1", ")" ;
-                    : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
-                }
-            );
-
-            output_data.push_child(manual_job_conversation, preset_selection);
-
-            conditional_events(
-                &settings,
-                &mut output_data,
-                (manual_job_source, manual_job_conversation),
-                (true, ACTIVATE_PREFIX, "activate"),
-                persistent_event_node_keys.as_slice(),
-            );
-
-            let main_failure = tree_from_tokens!(
-                &mut output_data; manual_job_source =>
-                : "fail" ;
-            );
-
-            output_data.push_child(manual_job_on_accept, main_failure);
-        }
-
-        generators::zip_root_nodes(
-            &mut archive,
-            "data/main.txt",
-            &output_data,
-            &output_data.root_nodes()[output_root_node_count..],
-        )?;
     }
 
-    archive.write_dir("data/presets/")?;
+    fn conditional_events(
+        &mut self,
+        (source, parent): (SourceIndex, NodeIndex),
+        (should_activate, event_name_prefix, label_suffix): (bool, &str, &str),
+        persistent_event_node_keys: &[&str],
+    ) {
+        for preset_index in 0..=(self.settings.max_presets) {
+            let skip_label = format!("not {preset_index} {label_suffix}");
 
-    for preset_index in 0..=(settings.max_presets) {
-        let preset_index = usize::from(preset_index);
+            let event_branch = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "branch", skip_label.as_str() ;
+                {
+                    : CURRENT_PRESET, "!=", preset_index ;
+                }
+            );
 
-        let shuffle_event_source = output_data.insert_source(String::new());
+            self.output_data.push_child(parent, event_branch);
 
-        let shuffled = if preset_index == 0 {
-            (0..(system_names.len()))
-                .map(|i| system_names[i])
+            let event_action = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "action" ;
+                {
+                    : "event", format!("{event_name_prefix} {preset_index}"), "0" ;
+                }
+            );
+
+            if should_activate {
+                self.output_data.push_child(parent, event_action);
+            }
+
+            for &event_name in persistent_event_node_keys {
+                let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
+                let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
+
+                let skip_label = format!("not {preset_index} {label_suffix} {event_name}");
+
+                let ((condition1, condition2), (action1, action2)) = self.side_event_conditions(
+                    event_name,
+                    (restore_name.as_str(), activate_name.as_str()),
+                    (should_activate, true),
+                    source,
+                );
+
+                let event_branch = tree_from_tokens!(
+                    &mut self.output_data; source =>
+                    : "branch", skip_label.as_str() ;
+                );
+
+                self.output_data.push_child(parent, event_branch);
+
+                self.output_data.push_child(event_branch, condition1);
+                self.output_data.push_child(event_branch, condition2);
+
+                let event_action = tree_from_tokens!(
+                    &mut self.output_data; source =>
+                    : "action" ;
+                );
+
+                self.output_data.push_child(parent, event_action);
+                self.output_data.push_child(event_action, action1);
+                self.output_data.push_child(event_action, action2);
+
+                let event_label = tree_from_tokens!(
+                    &mut self.output_data; source =>
+                    : "label", skip_label.as_str() ;
+                );
+
+                self.output_data.push_child(parent, event_label);
+            }
+
+            if !should_activate {
+                self.output_data.push_child(parent, event_action);
+            }
+
+            let event_label = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "label", skip_label.as_str() ;
+            );
+
+            self.output_data.push_child(parent, event_label);
+
+            if preset_index == self.settings.max_presets {
+                let blank_action = tree_from_tokens!(
+                    &mut self.output_data; source =>
+                    : "action" ;
+                    {
+                        : CURRENT_PRESET, "=", CURRENT_PRESET ;
+                    }
+                );
+
+                self.output_data.push_child(parent, blank_action);
+            }
+        }
+    }
+
+    fn event<'a>(
+        &mut self,
+        data: &'a Data,
+        shuffle_event_source: SourceIndex,
+        (shuffle_event_restore, shuffle_event_activate): (NodeIndex, NodeIndex),
+        system_swaps: &HashMap<&'a str, &'a str>,
+        persistent_nodes: &HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+    ) {
+        let mut persistent_node_keys = persistent_nodes.keys().copied().collect::<Vec<_>>();
+
+        persistent_node_keys.sort_unstable();
+
+        for (original_kind, original) in persistent_node_keys {
+            let replacement = system_swaps.get(original).map_or(original, |swap| swap);
+
+            let (removals, additions) = self.modify_node(
+                (original_kind, original),
+                data,
+                shuffle_event_source,
+                system_swaps,
+                persistent_nodes,
+            );
+
+            // do everything but links first in case `remove link` is one of the removals or additions
+            //
+            // this block is kind of ugly, in a beautiful way
+            let nodes_with_parent = removals
+                .iter()
+                .filter(|&&node_index| {
+                    !matches!(
+                        self.output_data
+                            .get_tokens(node_index)
+                            .and_then(|tokens| self
+                                .output_data
+                                .get_lexeme(shuffle_event_source, tokens[0])),
+                        Some("link" | "unlink")
+                    )
+                })
+                .map(|&node_index| (false, node_index))
+                .chain(
+                    additions
+                        .iter()
+                        .filter(|&&node_index| {
+                            !matches!(
+                                self.output_data
+                                    .get_tokens(node_index)
+                                    .and_then(|tokens| self
+                                        .output_data
+                                        .get_lexeme(shuffle_event_source, tokens[0])),
+                                Some("link" | "unlink")
+                            )
+                        })
+                        .map(|&node_index| (true, node_index)),
+                )
+                .collect::<Vec<_>>();
+
+            if !nodes_with_parent.is_empty() {
+                let parent_restore = tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : original_kind, replacement ;
+                );
+
+                let parent_activate = tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : original_kind, replacement ;
+                );
+
+                for (activate, modification) in nodes_with_parent {
+                    self.output_data.push_child(
+                        if activate {
+                            parent_activate
+                        } else {
+                            parent_restore
+                        },
+                        modification,
+                    );
+                }
+
+                self.output_data
+                    .push_child(shuffle_event_restore, parent_restore);
+                self.output_data
+                    .push_child(shuffle_event_activate, parent_activate);
+            }
+
+            // copy and paste for now, I can always make it better later
+            // TODO: don't copy and paste
+            //
+            // TODO: don't collect?
+            #[allow(clippy::needless_collect)]
+            for (modification_parent, modification) in removals
+                .iter()
+                .filter(|&&node_index| {
+                    matches!(
+                        self.output_data
+                            .get_tokens(node_index)
+                            .and_then(|tokens| self
+                                .output_data
+                                .get_lexeme(shuffle_event_source, tokens[0])),
+                        Some("link" | "unlink")
+                    )
+                })
+                .map(|&node_index| (shuffle_event_restore, node_index))
+                .chain(
+                    additions
+                        .iter()
+                        .filter(|&&node_index| {
+                            matches!(
+                                self.output_data
+                                    .get_tokens(node_index)
+                                    .and_then(|tokens| self
+                                        .output_data
+                                        .get_lexeme(shuffle_event_source, tokens[0])),
+                                Some("link" | "unlink")
+                            )
+                        })
+                        .map(|&node_index| (shuffle_event_activate, node_index)),
+                )
                 .collect::<Vec<_>>()
+            {
+                self.output_data
+                    .push_child(modification_parent, modification);
+            }
+        }
+    }
+
+    fn side_event_conditions(
+        &mut self,
+        event_name: &str,
+        (restore_name, activate_name): (&str, &str),
+        (should_activate, invert): (bool, bool),
+        shuffle_event_source: SourceIndex,
+    ) -> ((NodeIndex, NodeIndex), (NodeIndex, NodeIndex)) {
+        let condition1 = tree_from_tokens!(
+            &mut self.output_data; shuffle_event_source =>
+            :
+                if invert {
+                    "not"
+                } else {
+                    "has"
+                },
+                format!("event: {event_name}")
+            ;
+        );
+
+        if should_activate {
+            let condition2 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                :
+                    format!("event: {activate_name}: {event_name}"),
+                    if invert {
+                        "=="
+                    } else {
+                        "!="
+                    },
+                    format!("event: {event_name}")
+                ;
+            );
+
+            let action1 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : "event", format!("{activate_name}: {event_name}"), "0" ;
+            );
+
+            let action2 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : format!("event: {activate_name}: {event_name}"), "=", format!("event: {event_name}") ;
+            );
+
+            ((condition1, condition2), (action1, action2))
         } else {
-            system_names
-                .shuffled_indices(settings.seed.wrapping_add(preset_index))
-                .into_iter()
-                .map(|i| system_names[i])
-                .collect::<Vec<_>>()
+            let condition2 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                :
+                    if invert {
+                        "not"
+                    } else {
+                        "has"
+                    },
+                    format!("event: {activate_name}: {event_name}")
+                ;
+            );
+
+            let action1 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : "event", format!("{restore_name}: {event_name}"), "0" ;
+            );
+
+            let action2 = tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : format!("event: {activate_name}: {event_name}"), "=", "0" ;
+            );
+
+            ((condition1, condition2), (action1, action2))
+        }
+    }
+
+    fn modify_node(
+        &mut self,
+        (original_kind, original): (&str, &str),
+        data: &Data,
+        shuffle_event_source: SourceIndex,
+        system_swaps: &HashMap<&str, &str>,
+        persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
+    ) -> (Vec<NodeIndex>, Vec<NodeIndex>) {
+        let persistent_nodes = persistent_nodes
+            .get(&(original_kind, original))
+            .expect("Data must be verified in previous steps");
+
+        let (mut restoration, mut activation) = (None, None);
+
+        for should_activate in [false, true] {
+            let mut modified_nodes = vec![];
+
+            for (node_kind, node_values) in persistent_nodes {
+                let mut removed_all = false;
+
+                for node_value in node_values {
+                    let is_adding = (should_activate
+                        && matches!(node_value.0, NodeAction::Add | NodeAction::ClearAdd))
+                        || (!should_activate
+                            && matches!(
+                                node_value.0,
+                                NodeAction::Remove | NodeAction::ClearRemove
+                            ));
+
+                    match *node_kind {
+                        "pos" => {
+                            modified_nodes.push(self.modify_pos(
+                                data,
+                                node_value,
+                                shuffle_event_source,
+                            ));
+                        }
+                        "jump range" => {
+                            modified_nodes.push(self.modify_jump_range(
+                                data,
+                                node_value,
+                                shuffle_event_source,
+                                is_adding,
+                            ));
+                        }
+                        "link" | "unlink" => {
+                            if original_kind == "wormhole" && !is_adding {
+                                if removed_all {
+                                    break;
+                                }
+
+                                removed_all = true;
+                            }
+
+                            modified_nodes.push(self.modify_link(
+                                (node_kind, original_kind),
+                                data,
+                                node_value,
+                                shuffle_event_source,
+                                is_adding,
+                                system_swaps,
+                            ));
+                        }
+                        "object" => {
+                            modified_nodes.push(self.modify_object(
+                                data,
+                                node_value,
+                                shuffle_event_source,
+                                is_adding,
+                            ));
+                        }
+                        _ => {
+                            modified_nodes.push(self.modify_other(
+                                node_kind,
+                                data,
+                                node_value,
+                                shuffle_event_source,
+                                is_adding,
+                            ));
+                        }
+                    }
+                }
+            }
+
+            modified_nodes.sort_by(|&a, &b| {
+                match (
+                    self.output_data
+                        .get_tokens(a)
+                        .and_then(|tokens| tokens.first())
+                        .and_then(|token| self.output_data.get_lexeme(shuffle_event_source, *token))
+                        .expect("Only nodes with at least one token should be modified"),
+                    self.output_data
+                        .get_tokens(b)
+                        .and_then(|tokens| tokens.first())
+                        .and_then(|token| self.output_data.get_lexeme(shuffle_event_source, *token))
+                        .expect("Only nodes with at least one token should be modified"),
+                ) {
+                    ("pos" | "remove", _) => Ordering::Less,
+                    (_, "pos" | "remove") => Ordering::Greater,
+                    (_, _) => Ordering::Equal,
+                }
+            });
+
+            if should_activate {
+                activation = Some(modified_nodes);
+            } else {
+                restoration = Some(modified_nodes);
+            }
+        }
+
+        (
+            restoration
+                .take()
+                .expect("Data must be verified in previous steps"),
+            activation
+                .take()
+                .expect("Data must be verified in previous steps"),
+        )
+    }
+
+    fn modify_pos(
+        &mut self,
+        data: &Data,
+        node_value: &(NodeAction, SourceIndex, NodeIndex),
+        shuffle_event_source: SourceIndex,
+    ) -> NodeIndex {
+        copy_node(
+            data,
+            (node_value.1, node_value.2),
+            &mut self.output_data,
+            shuffle_event_source,
+            true,
+        )
+        .expect("Pos data must be verified in previous steps")
+    }
+
+    fn modify_jump_range(
+        &mut self,
+        data: &Data,
+        node_value: &(NodeAction, SourceIndex, NodeIndex),
+        shuffle_event_source: SourceIndex,
+        is_adding: bool,
+    ) -> NodeIndex {
+        if is_adding {
+            copy_node(
+                data,
+                (node_value.1, node_value.2),
+                &mut self.output_data,
+                shuffle_event_source,
+                true,
+            )
+            .expect("Jump range data must be verified in previous steps")
+        } else {
+            tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : "jump range", "0" ;
+            )
+        }
+    }
+
+    fn modify_link(
+        &mut self,
+        (node_kind, original_kind): (&str, &str),
+        data: &Data,
+        node_value: &(NodeAction, SourceIndex, NodeIndex),
+        shuffle_event_source: SourceIndex,
+        is_adding: bool,
+        system_swaps: &HashMap<&str, &str>,
+    ) -> NodeIndex {
+        let modified_link = if is_adding {
+            match original_kind {
+                "link" | "unlink" => tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "link" ;
+                ),
+                _ => tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "add", "link" ;
+                ),
+            }
+        } else {
+            match original_kind {
+                "link" | "unlink" => tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "unlink" ;
+                ),
+                _ => tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "remove", "link" ;
+                ),
+            }
         };
 
-        let system_swaps = system_names
-            .iter()
-            .copied()
-            .zip(shuffled)
-            .collect::<HashMap<_, _>>();
-
-        let preset_path = format!("data/presets/universe_preset_{preset_index}");
-
-        archive.write_dir(format!("{preset_path}/"))?;
-
-        let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
-        let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
-
-        {
-            let output_root_node_count = output_data.root_nodes().len();
-
-            let shuffle_event_restore = tree_from_tokens!(
-                &mut output_data; shuffle_event_source =>
-                : "event", restore_name.as_str() ;
-            );
-
-            output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
-
-            let shuffle_event_activate = tree_from_tokens!(
-                &mut output_data; shuffle_event_source =>
-                : "event", activate_name.as_str() ;
-            );
-
-            output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
-
-            generate_event(
-                data,
-                &mut output_data,
-                shuffle_event_source,
-                (shuffle_event_restore, shuffle_event_activate),
-                &system_swaps,
-                &persistent_nodes,
-            );
-
-            generators::zip_root_nodes(
-                &mut archive,
-                format!("{preset_path}/main.txt"),
-                &output_data,
-                &output_data.root_nodes()[output_root_node_count..],
-            )?;
-        }
-
-        {
-            let output_root_node_count = output_data.root_nodes().len();
-
-            for (event_name, event_map) in persistent_event_node_keys
-                .as_slice()
+        if original_kind != "wormhole" || is_adding {
+            for lexeme in data
+                .get_tokens(node_value.2)
+                .unwrap_or_default()
                 .iter()
-                .map(|&e| (e, persistent_event_nodes.get(e).unwrap()))
+                .filter_map(|t| data.get_lexeme(node_value.1, *t))
+                .skip_while(|l| *l != node_kind)
+                .skip(1)
             {
-                let shuffle_event_restore = tree_from_tokens!(
-                    &mut output_data; shuffle_event_source =>
-                    : "event", format!("{restore_name}: {event_name}") ;
-                );
+                let (start, end) = self
+                    .output_data
+                    .push_source(
+                        shuffle_event_source,
+                        system_swaps
+                            .get(lexeme)
+                            .expect("Link data must be verified in previous steps"),
+                    )
+                    .expect("Link data must be verified in previous steps");
 
-                output_data.push_root_node(shuffle_event_source, shuffle_event_restore);
-
-                let shuffle_event_activate = tree_from_tokens!(
-                    &mut output_data; shuffle_event_source =>
-                    : "event", format!("{activate_name}: {event_name}") ;
-                );
-
-                output_data.push_root_node(shuffle_event_source, shuffle_event_activate);
-
-                generate_event(
-                    data,
-                    &mut output_data,
-                    shuffle_event_source,
-                    (shuffle_event_restore, shuffle_event_activate),
-                    &system_swaps,
-                    event_map,
+                self.output_data.push_token(
+                    modified_link,
+                    Token::new(TokenKind::Symbol, Span::new(start, end)),
                 );
             }
-
-            generators::zip_root_nodes(
-                &mut archive,
-                format!("{preset_path}/events.txt"),
-                &output_data,
-                &output_data.root_nodes()[output_root_node_count..],
-            )?;
         }
 
-        {
-            let output_root_node_count = output_data.root_nodes().len();
-
-            for &event_name in persistent_event_nodes.keys() {
-                for (should_activate, kind_name) in [
-                    (false, restore_name.as_str()),
-                    (true, activate_name.as_str()),
-                ] {
-                    let shuffle_mission = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "mission", format!("zzzzz {kind_name}: {event_name}") ;
-                        {
-                            : "invisible" ;
-                            : "repeat" ;
-                            : "non-blocking" ;
-                            : "landing" ;
-                            : "offer precedence", "-1000000" ;
-                        }
-                    );
-
-                    output_data.push_root_node(shuffle_event_source, shuffle_mission);
-
-                    let mission_to_offer = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "to", "offer" ;
-                        {
-                            : "has", INSTALLED ;
-                            :
-                                CURRENT_PRESET,
-                                match should_activate {
-                                    false => "!=",
-                                    true => "==",
-                                },
-                                preset_index
-                            ;
-                        }
-                    );
-
-                    output_data.push_child(shuffle_mission, mission_to_offer);
-
-                    let mission_on_offer = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "on", "offer" ;
-                    );
-
-                    output_data.push_child(shuffle_mission, mission_on_offer);
-
-                    let ((condition1, condition2), (action1, action2)) =
-                        generate_side_event_conditions(
-                            event_name,
-                            (restore_name.as_str(), activate_name.as_str()),
-                            (should_activate, false),
-                            &mut output_data,
-                            shuffle_event_source,
-                        );
-
-                    output_data.push_child(mission_to_offer, condition1);
-                    output_data.push_child(mission_to_offer, condition2);
-
-                    output_data.push_child(mission_on_offer, action1);
-                    output_data.push_child(mission_on_offer, action2);
-
-                    let mission_failure = tree_from_tokens!(
-                        &mut output_data; shuffle_event_source =>
-                        : "fail" ;
-                    );
-
-                    output_data.push_child(mission_on_offer, mission_failure);
-                }
-            }
-
-            generators::zip_root_nodes(
-                &mut archive,
-                format!("{preset_path}/missions.txt"),
-                &output_data,
-                &output_data.root_nodes()[output_root_node_count..],
-            )?;
-        }
+        modified_link
     }
 
-    archive.finish()?;
+    fn modify_object(
+        &mut self,
+        data: &Data,
+        node_value: &(NodeAction, SourceIndex, NodeIndex),
+        shuffle_event_source: SourceIndex,
+        is_adding: bool,
+    ) -> NodeIndex {
+        let modified_object = copy_node(
+            data,
+            (node_value.1, node_value.2),
+            &mut self.output_data,
+            shuffle_event_source,
+            is_adding,
+        )
+        .expect("Object data must be verified in previous steps");
 
-    Ok(output)
+        let (start, end) = self
+            .output_data
+            .push_source(
+                shuffle_event_source,
+                if is_adding { "add" } else { "remove" },
+            )
+            .expect("Object data must be verified in previous steps");
+
+        if let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
+            self.output_data.get_mut_node(modified_object)
+        {
+            let modified_token = Token::new(TokenKind::Symbol, Span::new(start, end));
+
+            if matches!(
+                data.get_tokens(node_value.2)
+                    .and_then(|tokens| data.get_lexeme(node_value.1, tokens[0])),
+                Some("add" | "remove")
+            ) && let Some(modifier) = tokens.first_mut()
+            {
+                *modifier = modified_token;
+            } else {
+                tokens.insert(0, modified_token);
+            }
+        }
+
+        modified_object
+    }
+
+    fn modify_other(
+        &mut self,
+        node_kind: &str,
+        data: &Data,
+        node_value: &(NodeAction, SourceIndex, NodeIndex),
+        shuffle_event_source: SourceIndex,
+        is_adding: bool,
+    ) -> NodeIndex {
+        if is_adding {
+            let modified_copy = copy_node(
+                data,
+                (node_value.1, node_value.2),
+                &mut self.output_data,
+                shuffle_event_source,
+                true,
+            )
+            .expect("Data must be verified in previous steps");
+
+            if matches!(
+                self.output_data
+                    .get_tokens(modified_copy)
+                    .and_then(|tokens| tokens.first().and_then(|token| self
+                        .output_data
+                        .get_lexeme(shuffle_event_source, *token))),
+                Some("add" | "remove")
+            ) && let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
+                self.output_data.get_mut_node(modified_copy)
+            {
+                tokens.remove(0);
+            }
+
+            modified_copy
+        } else {
+            tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                : "remove", node_kind ;
+            )
+        }
+    }
 }
 
 fn find_wormholes_from_planets<'a>(data: &'a Data, wormholes: &mut HashSet<&'a str>) {
-    for (source_index, node_index) in
-        node_path_iter!(data; "planet").filter(|(source_index, node_index)| {
+    node_path_iter!(data; "planet")
+        .filter(|(source_index, node_index)| {
             data.get_tokens(*node_index).unwrap_or_default().len() >= 2
                 && !data
                     .get_children(*node_index)
@@ -744,13 +1389,13 @@ fn find_wormholes_from_planets<'a>(data: &'a Data, wormholes: &mut HashSet<&'a s
                     .next()
                     .is_some()
         })
-    {
-        wormholes.insert(
-            data.get_tokens(node_index)
-                .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
-                .unwrap(),
-        );
-    }
+        .for_each(|(source_index, node_index)| {
+            wormholes.insert(
+                data.get_tokens(node_index)
+                    .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
+                    .expect("The iterator should have a filter applied to ensure only nodes with at least two tokens make it here"),
+            );
+        });
 }
 
 fn find_wormholes_from_system<'a>(
@@ -759,19 +1404,13 @@ fn find_wormholes_from_system<'a>(
     (depth, planets, wormholes): (u64, &mut HashMap<&'a str, &'a str>, &mut HashSet<&'a str>),
     persistent_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
 ) -> bool {
-    let mut is_any_wormhole = false;
-
-    for child in data.filter_children(source_index, node_index, |source_index, tokens| {
-        let key_index = if matches!(
+    data.filter_children(source_index, node_index, |source_index, tokens| {
+        let key_index = usize::from(matches!(
             tokens
                 .first()
                 .and_then(|t| data.get_lexeme(source_index, *t)),
             Some("remove" | "add")
-        ) {
-            1
-        } else {
-            0
-        };
+        ));
 
         matches!(
             tokens
@@ -779,7 +1418,8 @@ fn find_wormholes_from_system<'a>(
                 .and_then(|t| data.get_lexeme(source_index, *t)),
             Some(l) if l == "object"
         )
-    }) {
+    })
+    .fold(false, |any_is_wormhole, child| {
         let mut is_wormhole = false;
 
         if let Some(object_name) = data
@@ -796,7 +1436,6 @@ fn find_wormholes_from_system<'a>(
             planets.insert(object_name, system_name);
 
             if wormholes.contains(object_name) {
-                is_any_wormhole |= true;
                 is_wormhole = true;
             }
         }
@@ -812,7 +1451,7 @@ fn find_wormholes_from_system<'a>(
             let action = match data
                 .get_tokens(child)
                 .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
-                .unwrap()
+                .expect("The iterator should use a filter to ensure only nodes with at least one token (or two, if starting with add/remove) are allowed")
             {
                 "remove" => {
                     if data.get_tokens(child).unwrap_or_default().len() >= 2
@@ -834,9 +1473,53 @@ fn find_wormholes_from_system<'a>(
                 OriginalNode::new(action, source_index, child),
             );
         }
+
+        any_is_wormhole || is_wormhole
+    })
+}
+
+fn find_persistent_event_nodes<'a>(
+    data: &'a Data,
+    system_names: &mut HashSet<&'a str>,
+    planets: &mut HashMap<&'a str, &'a str>,
+    wormholes: &mut HashSet<&'a str>,
+) -> HashMap<&'a str, HashMap<(&'a str, &'a str), OriginalNodes<'a>>> {
+    let mut persistent_event_nodes = HashMap::new();
+
+    for (source_index, node_index) in
+        node_path_iter!(&data; "event").filter(|&(source_index, node_index)| {
+            data.get_tokens(node_index).unwrap_or_default().len() >= 2
+                && !data
+                    .get_children(node_index)
+                    .unwrap_or_default()
+                    .is_empty()
+                && node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
+                    .next()
+                    .is_some()
+        })
+    {
+        let event_name = data
+            .get_tokens(node_index)
+            .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
+            .expect("The iterator should have a filter to ensure only nodes with at least two tokens make it here");
+
+        let mut event_map = HashMap::new();
+
+        data_from_node(
+            data,
+            node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
+                .map(|n| (source_index, n)),
+            system_names,
+            (planets, wormholes),
+            &mut event_map,
+        );
+
+        if !event_map.is_empty() {
+            persistent_event_nodes.insert(event_name, event_map);
+        }
     }
 
-    is_any_wormhole
+    persistent_event_nodes
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -847,6 +1530,8 @@ enum NodeAction {
     ClearAdd,
 }
 
+type PersistentOriginalNodes<'a> = HashMap<(&'a str, &'a str), OriginalNodes<'a>>;
+
 type OriginalNodes<'a> = HashMap<&'a str, Vec<(NodeAction, SourceIndex, NodeIndex)>>;
 
 struct OriginalNode {
@@ -856,7 +1541,7 @@ struct OriginalNode {
 }
 
 impl OriginalNode {
-    fn new(action: NodeAction, source: SourceIndex, node: NodeIndex) -> Self {
+    const fn new(action: NodeAction, source: SourceIndex, node: NodeIndex) -> Self {
         Self {
             action,
             source,
@@ -875,7 +1560,7 @@ trait NodePersistence<'a> {
     );
 }
 
-impl<'a> NodePersistence<'a> for HashMap<(&'a str, &'a str), OriginalNodes<'a>> {
+impl<'a> NodePersistence<'a> for PersistentOriginalNodes<'a> {
     fn persist(
         &mut self,
         original_node_kind: &'a str,
@@ -899,13 +1584,15 @@ impl<'a> NodePersistence<'a> for HashMap<(&'a str, &'a str), OriginalNodes<'a>> 
                             ));
                         }
                     })
-                    .or_insert(vec![(
-                        original_node.action,
-                        original_node.source,
-                        original_node.node,
-                    )]);
+                    .or_insert_with(|| {
+                        vec![(
+                            original_node.action,
+                            original_node.source,
+                            original_node.node,
+                        )]
+                    });
             })
-            .or_insert({
+            .or_insert_with(|| {
                 let mut nodes = HashMap::new();
                 nodes.insert(
                     node_kind,
@@ -933,12 +1620,12 @@ fn data_from_node<'a>(
         let original_node_kind = data
             .get_tokens(node_index)
             .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
-            .unwrap();
+            .expect("The iterator should use a filter to ensure only nodes with at least two tokens make it this far");
 
         let original_node_name = data
             .get_tokens(node_index)
             .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
-            .unwrap();
+            .expect("The iterator should use a filter to ensure only nodes with at least two tokens make it this far");
 
         match original_node_kind {
             "system" => {
@@ -987,16 +1674,12 @@ fn data_from_node<'a>(
             _ => [].as_slice(),
         } {
             for child in data.filter_children(source_index, node_index, |source_index, tokens| {
-                let key_index = if matches!(
+                let key_index = usize::from(matches!(
                     tokens
                         .first()
                         .and_then(|t| data.get_lexeme(source_index, *t)),
                     Some("remove" | "add")
-                ) {
-                    1
-                } else {
-                    0
-                };
+                ));
 
                 matches!(
                     tokens
@@ -1008,7 +1691,7 @@ fn data_from_node<'a>(
                 let action = match data
                     .get_tokens(child)
                     .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
-                    .unwrap()
+                .expect("The iterator should use a filter to ensure only nodes with at least one tokens (or two, if starting with add/remove) are allowed")
                 {
                     "remove" => {
                         if data.get_tokens(child).unwrap_or_default().len() >= 2
@@ -1030,508 +1713,6 @@ fn data_from_node<'a>(
                     OriginalNode::new(action, source_index, child),
                 );
             }
-        }
-    }
-}
-
-fn modify_node(
-    (original_kind, original): (&str, &str),
-    data: &Data,
-    output_data: &mut Data,
-    shuffle_event_source: SourceIndex,
-    system_swaps: &HashMap<&str, &str>,
-    persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
-) -> (Vec<NodeIndex>, Vec<NodeIndex>) {
-    let persistent_nodes = persistent_nodes.get(&(original_kind, original)).unwrap();
-
-    let (mut restoration, mut activation) = (None, None);
-
-    for should_activate in [false, true] {
-        let mut modified_nodes = vec![];
-
-        for (node_kind, node_values) in persistent_nodes.iter() {
-            let mut removed_all = false;
-
-            for node_value in node_values.iter() {
-                let is_adding = (should_activate
-                    && matches!(node_value.0, NodeAction::Add | NodeAction::ClearAdd))
-                    || (!should_activate
-                        && matches!(node_value.0, NodeAction::Remove | NodeAction::ClearRemove));
-
-                match *node_kind {
-                    "pos" => {
-                        let modified_copy = copy_node(
-                            data,
-                            (node_value.1, node_value.2),
-                            output_data,
-                            shuffle_event_source,
-                            true,
-                        )
-                        .unwrap();
-
-                        modified_nodes.push(modified_copy);
-                    }
-                    "jump range" => {
-                        let modified_copy = if !is_adding {
-                            tree_from_tokens!(
-                                output_data; shuffle_event_source =>
-                                : "jump range", "0" ;
-                            )
-                        } else {
-                            copy_node(
-                                data,
-                                (node_value.1, node_value.2),
-                                output_data,
-                                shuffle_event_source,
-                                true,
-                            )
-                            .unwrap()
-                        };
-
-                        modified_nodes.push(modified_copy);
-                    }
-                    "link" | "unlink" => {
-                        if original_kind == "wormhole" && !is_adding {
-                            if removed_all {
-                                break;
-                            }
-
-                            removed_all = true;
-                        }
-
-                        let modified_link = if is_adding {
-                            match original_kind {
-                                "link" | "unlink" => tree_from_tokens!(
-                                    output_data; shuffle_event_source =>
-                                    : "link" ;
-                                ),
-                                _ => tree_from_tokens!(
-                                    output_data; shuffle_event_source =>
-                                    : "add", "link" ;
-                                ),
-                            }
-                        } else {
-                            match original_kind {
-                                "link" | "unlink" => tree_from_tokens!(
-                                    output_data; shuffle_event_source =>
-                                    : "unlink" ;
-                                ),
-                                _ => tree_from_tokens!(
-                                    output_data; shuffle_event_source =>
-                                    : "remove", "link" ;
-                                ),
-                            }
-                        };
-
-                        if original_kind != "wormhole" || is_adding {
-                            for lexeme in data
-                                .get_tokens(node_value.2)
-                                .unwrap_or_default()
-                                .iter()
-                                .flat_map(|t| data.get_lexeme(node_value.1, *t))
-                                .skip_while(|l| l != node_kind)
-                                .skip(1)
-                            {
-                                let (start, end) = output_data
-                                    .push_source(
-                                        shuffle_event_source,
-                                        system_swaps.get(lexeme).unwrap(),
-                                    )
-                                    .unwrap();
-
-                                output_data.push_token(
-                                    modified_link,
-                                    Token::new(TokenKind::Symbol, Span::new(start, end)),
-                                );
-                            }
-                        }
-
-                        modified_nodes.push(modified_link);
-                    }
-                    "object" => {
-                        let modified_copy = copy_node(
-                            data,
-                            (node_value.1, node_value.2),
-                            output_data,
-                            shuffle_event_source,
-                            is_adding,
-                        )
-                        .unwrap();
-
-                        let (start, end) = output_data
-                            .push_source(
-                                shuffle_event_source,
-                                if is_adding { "add" } else { "remove" },
-                            )
-                            .unwrap();
-
-                        if let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
-                            output_data.get_mut_node(modified_copy)
-                        {
-                            let modified_token =
-                                Token::new(TokenKind::Symbol, Span::new(start, end));
-
-                            if matches!(
-                                data.get_tokens(node_value.2)
-                                    .and_then(|tokens| data.get_lexeme(node_value.1, tokens[0])),
-                                Some("add" | "remove")
-                            ) && let Some(modifier) = tokens.first_mut()
-                            {
-                                *modifier = modified_token;
-                            } else {
-                                tokens.insert(0, modified_token);
-                            }
-                        }
-
-                        modified_nodes.push(modified_copy);
-                    }
-                    _ => {
-                        let modified_copy = if matches!(
-                            (should_activate, node_value.0),
-                            (true, NodeAction::Add | NodeAction::ClearAdd)
-                                | (false, NodeAction::Remove | NodeAction::ClearRemove)
-                        ) {
-                            let modified_copy = copy_node(
-                                data,
-                                (node_value.1, node_value.2),
-                                output_data,
-                                shuffle_event_source,
-                                true,
-                            )
-                            .unwrap();
-
-                            if let Some("add" | "remove") = output_data.get_lexeme(
-                                shuffle_event_source,
-                                output_data.get_tokens(modified_copy).unwrap()[0],
-                            ) && let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
-                                output_data.get_mut_node(modified_copy)
-                            {
-                                tokens.remove(0);
-                            }
-
-                            modified_copy
-                        } else {
-                            tree_from_tokens!(
-                                output_data; shuffle_event_source =>
-                                : "remove", node_kind ;
-                            )
-                        };
-
-                        modified_nodes.push(modified_copy);
-                    }
-                }
-            }
-        }
-
-        modified_nodes.sort_by(|&a, &b| {
-            match (
-                output_data
-                    .get_tokens(a)
-                    .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0]))
-                    .unwrap(),
-                output_data
-                    .get_tokens(b)
-                    .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0]))
-                    .unwrap(),
-            ) {
-                ("pos" | "remove", _) => Ordering::Less,
-                (_, "pos" | "remove") => Ordering::Greater,
-                (_, _) => Ordering::Equal,
-            }
-        });
-
-        match should_activate {
-            false => restoration = Some(modified_nodes),
-            true => activation = Some(modified_nodes),
-        }
-    }
-
-    (restoration.take().unwrap(), activation.take().unwrap())
-}
-
-fn conditional_events(
-    settings: &SystemShufflerConfig,
-    output_data: &mut Data,
-    (source, parent): (SourceIndex, NodeIndex),
-    (should_activate, event_name_prefix, label_suffix): (bool, &str, &str),
-    persistent_event_node_keys: &[&str],
-) {
-    for preset_index in 0..=(settings.max_presets) {
-        let skip_label = format!("not {preset_index} {label_suffix}");
-
-        let event_branch = tree_from_tokens!(
-            output_data; source =>
-            : "branch", skip_label.as_str() ;
-            {
-                : CURRENT_PRESET, "!=", preset_index ;
-            }
-        );
-
-        output_data.push_child(parent, event_branch);
-
-        let event_action = tree_from_tokens!(
-            output_data; source =>
-            : "action" ;
-            {
-                : "event", format!("{event_name_prefix} {preset_index}"), "0" ;
-            }
-        );
-
-        if should_activate {
-            output_data.push_child(parent, event_action);
-        }
-
-        for &event_name in persistent_event_node_keys {
-            let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
-            let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
-
-            let skip_label = format!("not {preset_index} {label_suffix} {event_name}");
-
-            let ((condition1, condition2), (action1, action2)) = generate_side_event_conditions(
-                event_name,
-                (restore_name.as_str(), activate_name.as_str()),
-                (should_activate, true),
-                output_data,
-                source,
-            );
-
-            let event_branch = tree_from_tokens!(
-                output_data; source =>
-                : "branch", skip_label.as_str() ;
-            );
-
-            output_data.push_child(parent, event_branch);
-
-            output_data.push_child(event_branch, condition1);
-            output_data.push_child(event_branch, condition2);
-
-            let event_action = tree_from_tokens!(
-                output_data; source =>
-                : "action" ;
-            );
-
-            output_data.push_child(parent, event_action);
-            output_data.push_child(event_action, action1);
-            output_data.push_child(event_action, action2);
-
-            let event_label = tree_from_tokens!(
-                output_data; source =>
-                : "label", skip_label.as_str() ;
-            );
-
-            output_data.push_child(parent, event_label);
-        }
-
-        if !should_activate {
-            output_data.push_child(parent, event_action);
-        }
-
-        let event_label = tree_from_tokens!(
-            output_data; source =>
-            : "label", skip_label.as_str() ;
-        );
-
-        output_data.push_child(parent, event_label);
-
-        if preset_index == settings.max_presets {
-            let blank_action = tree_from_tokens!(
-                output_data; source =>
-                : "action" ;
-                {
-                    : CURRENT_PRESET, "=", CURRENT_PRESET ;
-                }
-            );
-
-            output_data.push_child(parent, blank_action);
-        }
-    }
-}
-
-fn generate_event<'a>(
-    data: &'a Data,
-    output_data: &mut Data,
-    shuffle_event_source: SourceIndex,
-    (shuffle_event_restore, shuffle_event_activate): (NodeIndex, NodeIndex),
-    system_swaps: &HashMap<&'a str, &'a str>,
-    persistent_nodes: &HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
-) {
-    let mut persistent_node_keys = persistent_nodes.keys().copied().collect::<Vec<_>>();
-
-    persistent_node_keys.sort();
-
-    for (original_kind, original) in persistent_node_keys {
-        let replacement = if original_kind == "system" {
-            *system_swaps.get(original).unwrap()
-        } else {
-            original
-        };
-
-        let (removals, additions) = modify_node(
-            (original_kind, original),
-            data,
-            output_data,
-            shuffle_event_source,
-            system_swaps,
-            persistent_nodes,
-        );
-
-        // do everything but links first in case `remove link` is one of the removals or additions
-        //
-        // this block is kind of ugly, in a beautiful way
-        let nodes_with_parent = removals
-            .iter()
-            .filter(|&&node_index| {
-                !matches!(
-                    output_data
-                        .get_tokens(node_index)
-                        .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0])),
-                    Some("link" | "unlink")
-                )
-            })
-            .map(|&node_index| (false, node_index))
-            .chain(
-                additions
-                    .iter()
-                    .filter(|&&node_index| {
-                        !matches!(
-                            output_data
-                                .get_tokens(node_index)
-                                .and_then(|tokens| output_data
-                                    .get_lexeme(shuffle_event_source, tokens[0])),
-                            Some("link" | "unlink")
-                        )
-                    })
-                    .map(|&node_index| (true, node_index)),
-            )
-            .collect::<Vec<_>>();
-
-        if !nodes_with_parent.is_empty() {
-            let parent_restore = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : original_kind, replacement ;
-            );
-
-            let parent_activate = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : original_kind, replacement ;
-            );
-
-            for (activate, modification) in nodes_with_parent {
-                output_data.push_child(
-                    if activate {
-                        parent_activate
-                    } else {
-                        parent_restore
-                    },
-                    modification,
-                );
-            }
-
-            output_data.push_child(shuffle_event_restore, parent_restore);
-            output_data.push_child(shuffle_event_activate, parent_activate);
-        }
-
-        // copy and paste for now, I can always make it better later
-        // TODO: don't copy and paste
-        for (modification_parent, modification) in removals
-            .iter()
-            .filter(|&&node_index| {
-                matches!(
-                    output_data
-                        .get_tokens(node_index)
-                        .and_then(|tokens| output_data.get_lexeme(shuffle_event_source, tokens[0])),
-                    Some("link" | "unlink")
-                )
-            })
-            .map(|&node_index| (shuffle_event_restore, node_index))
-            .chain(
-                additions
-                    .iter()
-                    .filter(|&&node_index| {
-                        matches!(
-                            output_data
-                                .get_tokens(node_index)
-                                .and_then(|tokens| output_data
-                                    .get_lexeme(shuffle_event_source, tokens[0])),
-                            Some("link" | "unlink")
-                        )
-                    })
-                    .map(|&node_index| (shuffle_event_activate, node_index)),
-            )
-            .collect::<Vec<_>>()
-        {
-            output_data.push_child(modification_parent, modification);
-        }
-    }
-}
-
-fn generate_side_event_conditions(
-    event_name: &str,
-    (restore_name, activate_name): (&str, &str),
-    (should_activate, invert): (bool, bool),
-    output_data: &mut Data,
-    shuffle_event_source: SourceIndex,
-) -> ((NodeIndex, NodeIndex), (NodeIndex, NodeIndex)) {
-    let condition1 = tree_from_tokens!(
-        output_data; shuffle_event_source =>
-        :
-            match invert {
-                false => "has",
-                true => "not",
-            },
-            format!("event: {event_name}")
-        ;
-    );
-
-    match should_activate {
-        false => {
-            let condition2 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                :
-                    match invert {
-                        false => "has",
-                        true => "not",
-                    },
-                    format!("event: {activate_name}: {event_name}")
-                ;
-            );
-
-            let action1 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : "event", format!("{restore_name}: {event_name}"), "0" ;
-            );
-
-            let action2 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : format!("event: {activate_name}: {event_name}"), "=", "0" ;
-            );
-
-            ((condition1, condition2), (action1, action2))
-        }
-        true => {
-            let condition2 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                :
-                    format!("event: {activate_name}: {event_name}"),
-                    match invert {
-                        false => "!=",
-                        true => "==",
-                    },
-                    format!("event: {event_name}")
-                ;
-            );
-
-            let action1 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : "event", format!("{activate_name}: {event_name}"), "0" ;
-            );
-
-            let action2 = tree_from_tokens!(
-                output_data; shuffle_event_source =>
-                : format!("event: {activate_name}: {event_name}"), "=", format!("event: {event_name}") ;
-            );
-
-            ((condition1, condition2), (action1, action2))
         }
     }
 }

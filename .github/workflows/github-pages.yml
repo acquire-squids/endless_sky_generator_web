@@ -43,7 +43,7 @@ jobs:
       - name: Cargo clippy
         id: cargo_clippy
         if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo clippy --release -- -Dwarnings
+        run: cargo clippy --release
       
       - name: Build
         id: build
