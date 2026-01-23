@@ -144,6 +144,7 @@ impl FullMap<'_> {
             : "event", format!("Full Map: I know where everything is now") ;
         );
 
+        let mut system_names = vec![];
         let mut planet_names = vec![];
 
         for (source_index, system) in node_path_iter!(
@@ -151,14 +152,27 @@ impl FullMap<'_> {
         )
         .filter(|(_, node_index)| data.get_tokens(*node_index).unwrap_or_default().len() >= 2)
         {
+            system_names.push(
+                data
+                    .get_tokens(system)
+                    .and_then(|tokens| tokens.get(1))
+                    .and_then(|token| data.get_lexeme(source_index, *token))
+                    .expect("The iterator should have a filter applied such that only nodes with two or more tokens are allowed")
+            );
+
+            find_named_objects(data, source_index, system, &mut planet_names);
+        }
+
+        system_names.sort_unstable();
+        planet_names.sort_unstable();
+
+        for system_name in system_names {
             let visit_system = tree_from_tokens!(
                 &mut self.output_data; event_txt_source =>
-                : "visit", data.get_tokens(system).and_then(|t| data.get_lexeme(source_index, t[1])).expect("The iterator should have a filter applied such that only nodes with two or more tokens are allowed") ;
+                : "visit", system_name ;
             );
 
             self.output_data.push_child(event, visit_system);
-
-            find_named_objects(data, source_index, system, &mut planet_names);
         }
 
         for planet_name in planet_names {
