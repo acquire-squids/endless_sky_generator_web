@@ -150,17 +150,12 @@ pub fn process(
         &mut persistent_nodes,
     );
 
-    let persistent_event_nodes =
+    let (persistent_event_node_keys, persistent_event_nodes) =
         find_persistent_event_nodes(data, &mut system_names, &mut planets, &mut wormholes);
 
     let mut system_names = system_names.into_iter().collect::<Vec<_>>();
 
     system_names.sort_unstable();
-
-    let mut persistent_event_node_keys = persistent_event_nodes.keys().copied().collect::<Vec<_>>();
-
-    // TODO: sort events by when they happen chronologically?
-    persistent_event_node_keys.sort_unstable();
 
     generator.archive.write_dir("data/")?;
 
@@ -673,7 +668,7 @@ impl SystemShuffler<'_> {
         data: &Data,
         shuffle_event_source: SourceIndex,
         system_swaps: &HashMap<&str, &str>,
-        persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
+        persistent_nodes: &PersistentOriginalNodes<'_>,
         (restore_name, activate_name): (&str, &str),
     ) {
         let shuffle_event_restore = tree_from_tokens!(
@@ -877,7 +872,7 @@ impl SystemShuffler<'_> {
         shuffle_event_source: SourceIndex,
         (shuffle_event_restore, shuffle_event_activate): (NodeIndex, NodeIndex),
         system_swaps: &HashMap<&'a str, &'a str>,
-        persistent_nodes: &HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+        persistent_nodes: &PersistentOriginalNodes<'a>,
     ) {
         let mut persistent_node_keys = persistent_nodes.keys().copied().collect::<Vec<_>>();
 
@@ -1073,7 +1068,7 @@ impl SystemShuffler<'_> {
         data: &Data,
         shuffle_event_source: SourceIndex,
         system_swaps: &HashMap<&str, &str>,
-        persistent_nodes: &HashMap<(&str, &str), OriginalNodes<'_>>,
+        persistent_nodes: &PersistentOriginalNodes<'_>,
     ) -> (Vec<NodeIndex>, Vec<NodeIndex>) {
         let persistent_nodes = persistent_nodes
             .get(&(original_kind, original))
@@ -1151,24 +1146,7 @@ impl SystemShuffler<'_> {
                 }
             }
 
-            modified_nodes.sort_by(|&a, &b| {
-                match (
-                    self.output_data
-                        .get_tokens(a)
-                        .and_then(|tokens| tokens.first())
-                        .and_then(|token| self.output_data.get_lexeme(shuffle_event_source, *token))
-                        .expect("Only nodes with at least one token should be modified"),
-                    self.output_data
-                        .get_tokens(b)
-                        .and_then(|tokens| tokens.first())
-                        .and_then(|token| self.output_data.get_lexeme(shuffle_event_source, *token))
-                        .expect("Only nodes with at least one token should be modified"),
-                ) {
-                    ("pos" | "remove", _) => Ordering::Less,
-                    (_, "pos" | "remove") => Ordering::Greater,
-                    (_, _) => Ordering::Equal,
-                }
-            });
+            modified_nodes.sort_by(|a, b| self.sort_modifications_by(shuffle_event_source, a, b));
 
             if should_activate {
                 activation = Some(modified_nodes);
@@ -1185,6 +1163,28 @@ impl SystemShuffler<'_> {
                 .take()
                 .expect("Data must be verified in previous steps"),
         )
+    }
+
+    fn sort_modifications_by(&self, source: SourceIndex, a: &NodeIndex, b: &NodeIndex) -> Ordering {
+        match (
+            self.output_data
+                .get_tokens(*a)
+                .and_then(|tokens| tokens.first())
+                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .expect("Only nodes with at least one token should be modified"),
+            self.output_data
+                .get_tokens(*b)
+                .and_then(|tokens| tokens.first())
+                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .expect("Only nodes with at least one token should be modified"),
+        ) {
+            (a, b) if a == b => Ordering::Equal,
+            ("pos", _) => Ordering::Less,
+            (_, "pos") => Ordering::Greater,
+            (_, "add" | "link") | ("remove" | "unlink", _) => Ordering::Less,
+            ("add" | "link", _) | (_, "remove" | "unlink") => Ordering::Greater,
+            (_, _) => Ordering::Equal,
+        }
     }
 
     fn modify_pos(
@@ -1402,7 +1402,7 @@ fn find_wormholes_from_system<'a>(
     data: &'a Data,
     (system_name, source_index, node_index): (&'a str, SourceIndex, NodeIndex),
     (depth, planets, wormholes): (u64, &mut HashMap<&'a str, &'a str>, &mut HashSet<&'a str>),
-    persistent_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+    persistent_nodes: &mut PersistentOriginalNodes<'a>,
 ) -> bool {
     data.filter_children(source_index, node_index, |source_index, tokens| {
         let key_index = usize::from(matches!(
@@ -1483,7 +1483,8 @@ fn find_persistent_event_nodes<'a>(
     system_names: &mut HashSet<&'a str>,
     planets: &mut HashMap<&'a str, &'a str>,
     wormholes: &mut HashSet<&'a str>,
-) -> HashMap<&'a str, HashMap<(&'a str, &'a str), OriginalNodes<'a>>> {
+) -> (Vec<&'a str>, HashMap<&'a str, PersistentOriginalNodes<'a>>) {
+    let mut persistent_event_node_keys = vec![];
     let mut persistent_event_nodes = HashMap::new();
 
     for (source_index, node_index) in
@@ -1515,11 +1516,20 @@ fn find_persistent_event_nodes<'a>(
         );
 
         if !event_map.is_empty() {
+            persistent_event_node_keys.push((node_index.index(), event_name));
             persistent_event_nodes.insert(event_name, event_map);
         }
     }
 
-    persistent_event_nodes
+    persistent_event_node_keys.sort_unstable();
+
+    (
+        persistent_event_node_keys
+            .into_iter()
+            .map(|(_, event_name)| event_name)
+            .collect::<Vec<_>>(),
+        persistent_event_nodes,
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1612,7 +1622,7 @@ fn data_from_node<'a>(
     nodes: impl Iterator<Item = (SourceIndex, NodeIndex)>,
     system_names: &mut HashSet<&'a str>,
     (planets, wormholes): (&mut HashMap<&'a str, &'a str>, &mut HashSet<&'a str>),
-    persistent_nodes: &mut HashMap<(&'a str, &'a str), OriginalNodes<'a>>,
+    persistent_nodes: &mut PersistentOriginalNodes<'a>,
 ) {
     for (source_index, node_index) in
         nodes.filter(|(_, node_index)| data.get_tokens(*node_index).unwrap_or_default().len() >= 2)

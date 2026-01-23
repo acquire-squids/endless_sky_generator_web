@@ -6,6 +6,8 @@ fn main() -> ExitCode {
 
     match read_source(input_path, &mut paths_list) {
         ReadResult::Ok => {
+            paths_list.sort_unstable();
+
             let list_as_text = paths_list
                 .into_iter()
                 .filter(|path| {
