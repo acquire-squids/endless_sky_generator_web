@@ -4,7 +4,7 @@ pub trait ShuffleIndex {
     fn shuffled_indices(&self, seed: usize) -> Vec<usize>;
 }
 
-impl<T> ShuffleIndex for Vec<T> {
+impl<T> ShuffleIndex for &[T] {
     fn shuffled_indices(&self, seed: usize) -> Vec<usize> {
         let mut rng = XoShiRo256SS::new(seed as u64);
 
@@ -12,7 +12,10 @@ impl<T> ShuffleIndex for Vec<T> {
 
         for i in (1..(self.len())).rev() {
             let j = rng.rand_range(0, (i as u64) + 1);
-            indices.swap(j as usize, i);
+            indices.swap(
+                usize::try_from(j).expect("The index swap range will always be within a usize"),
+                i,
+            );
         }
 
         indices
@@ -24,7 +27,7 @@ pub struct XoShiRo256SS {
 }
 
 impl XoShiRo256SS {
-    pub fn new(seed: u64) -> Self {
+    pub const fn new(seed: u64) -> Self {
         let mut splitmix = SplitMix64::new(seed);
         let mut state = [0; 4];
 
@@ -36,7 +39,7 @@ impl XoShiRo256SS {
         Self { state }
     }
 
-    pub fn step(&mut self) -> u64 {
+    pub const fn step(&mut self) -> u64 {
         let value = self.state[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
 
         let t = self.state[1].wrapping_shl(17);
@@ -57,7 +60,7 @@ impl XoShiRo256SS {
             return self.step();
         }
 
-        if let Some(num_range) = maximum.checked_sub(minimum) {
+        maximum.checked_sub(minimum).map_or(minimum, |num_range| {
             let bits = num_range.checked_ilog2().unwrap_or_default() + 1;
 
             if bits < 64 {
@@ -71,9 +74,7 @@ impl XoShiRo256SS {
             } else {
                 self.step()
             }
-        } else {
-            minimum
-        }
+        })
     }
 }
 
@@ -82,16 +83,16 @@ struct SplitMix64 {
 }
 
 impl SplitMix64 {
-    fn new(seed: u64) -> Self {
+    const fn new(seed: u64) -> Self {
         Self { state: seed }
     }
 
-    fn step(&mut self) -> u64 {
-        self.state = self.state.wrapping_add(0x9E3779B97F4A7C15);
+    const fn step(&mut self) -> u64 {
+        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
 
-        let value = (self.state ^ self.state.wrapping_shr(30)).wrapping_mul(0xBF58476D1CE4E5B9);
+        let value = (self.state ^ self.state.wrapping_shr(30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
 
-        let value = (value ^ value.wrapping_shr(27)).wrapping_mul(0x94D049BB133111EB);
+        let value = (value ^ value.wrapping_shr(27)).wrapping_mul(0x94D0_49BB_1331_11EB);
 
         value ^ value.wrapping_shr(31)
     }
