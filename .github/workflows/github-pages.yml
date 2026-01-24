@@ -33,12 +33,12 @@ jobs:
 
       - name: Install wasm32-unknown-unknown target
         id: install_wasm_target
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         run: rustup target add wasm32-unknown-unknown
         
       - name: Install wasm-bindgen
         id: install_wasm_bindgen
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         run: cargo install --version =0.2.108 wasm-bindgen-cli
 
       - name: Cargo clippy
@@ -59,7 +59,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ steps.cache-restore.outputs.cache-primary-key }}
       
       - name: Run wasm-bindgen
         id: bind
