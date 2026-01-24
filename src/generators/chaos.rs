@@ -79,6 +79,7 @@ struct OutfitData<'a> {
 
 struct ShipData<'a> {
     name: &'a str,
+    model: &'a str,
     noun: Option<NodeIndex>,
     plural: Option<NodeIndex>,
     sprite: Option<NodeIndex>,
@@ -276,7 +277,9 @@ impl Chaos<'_> {
 
         let ship_output_source = self.output_data.insert_source(String::new());
 
-        let ship_data = self.get_ship_data(data, ship_output_source);
+        let mut ship_data = self.get_ship_data(data, ship_output_source);
+
+        self.get_ship_variant_data(data, ship_output_source, &mut ship_data);
 
         let mut ship_keys = ship_data.keys().collect::<Vec<_>>();
 
@@ -293,18 +296,28 @@ impl Chaos<'_> {
             )
             .collect::<HashMap<_, _>>();
 
-        // TODO: ship variants don't get swapped assets, fix that
         for original in &ship_keys {
+            let original_data = ship_data.get(**original).expect("Ship data must exist");
             let swap = ship_swaps.get(original).expect("Ship data must exist");
             let swapped_data = ship_data.get(**swap).expect("Ship data must exist");
 
-            let ship = tree_from_tokens!(
-                &mut self.output_data; ship_output_source =>
-                : "ship", original ;
-                {
-                    : "display name", swapped_data.name ;
-                }
-            );
+            let ship = if original_data.model == **original {
+                tree_from_tokens!(
+                    &mut self.output_data; ship_output_source =>
+                    : "ship", original ;
+                    {
+                        : "display name", swapped_data.name ;
+                    }
+                )
+            } else {
+                tree_from_tokens!(
+                    &mut self.output_data; ship_output_source =>
+                    : "ship", original_data.model, original ;
+                    {
+                        : "display name", swapped_data.name ;
+                    }
+                )
+            };
 
             if let Some(noun) = swapped_data.noun {
                 self.output_data.push_child(ship, noun);
@@ -430,6 +443,7 @@ impl Chaos<'_> {
                             })
                             .last()
                             .map_or(ship_name, |ship_name| ship_name),
+                        model: ship_name,
                         plural: self.get_copy_of_child_node(
                             data,
                             (ship_source_index, ship),
@@ -459,5 +473,91 @@ impl Chaos<'_> {
 
                 accum
             })
+    }
+
+    fn get_ship_variant_data<'a>(
+        &mut self,
+        data: &'a Data,
+        ship_output_source: SourceIndex,
+        ship_data: &mut HashMap<&'a str, ShipData<'a>>,
+    ) {
+        node_path_iter!(data; "ship")
+            .filter(|(source_index, node_index)| {
+                data.get_tokens(*node_index).map_or(0, <[Token]>::len) == 3
+                    && node_path_iter!(
+                        data => (*source_index, *node_index);
+                        "display name" | "plural" | "noun" | "sprite" | "thumbnail"
+                    )
+                    .next()
+                    .is_some()
+            })
+            .for_each(|(ship_source_index, ship)| {
+                let ship_variant = data
+                    .get_tokens(ship)
+                    .and_then(|tokens| tokens.get(2))
+                    .and_then(|token| data.get_lexeme(ship_source_index, *token))
+                    .expect("The iterator should use a filter to ensure all ships have a name");
+
+                let ship_model = data
+                    .get_tokens(ship)
+                    .and_then(|tokens| tokens.get(1))
+                    .and_then(|token| data.get_lexeme(ship_source_index, *token))
+                    .expect("The iterator should use a filter to ensure all ships have a name");
+
+                let ship_sprite = self
+                    .get_copy_of_child_node(
+                        data,
+                        (ship_source_index, ship),
+                        "sprite",
+                        2,
+                        ship_output_source,
+                    )
+                    .or_else(|| ship_data.get(&ship_model).and_then(|data| data.sprite));
+
+                ship_data.insert(
+                    ship_variant,
+                    ShipData {
+                        name: node_path_iter!(data => (ship_source_index, ship); "display name")
+                            .filter_map(|node_index| {
+                                data.get_tokens(node_index).and_then(|tokens| {
+                                    tokens.get(1).and_then(|token| {
+                                        data.get_lexeme(ship_source_index, *token)
+                                    })
+                                })
+                            })
+                            .last()
+                            .map_or(ship_model, |ship_name| ship_name),
+                        model: ship_model,
+                        plural: self
+                            .get_copy_of_child_node(
+                                data,
+                                (ship_source_index, ship),
+                                "plural",
+                                2,
+                                ship_output_source,
+                            )
+                            .or_else(|| ship_data.get(&ship_model).and_then(|data| data.plural)),
+                        noun: self
+                            .get_copy_of_child_node(
+                                data,
+                                (ship_source_index, ship),
+                                "noun",
+                                2,
+                                ship_output_source,
+                            )
+                            .or_else(|| ship_data.get(&ship_model).and_then(|data| data.noun)),
+                        sprite: ship_sprite,
+                        thumbnail: self
+                            .get_copy_of_child_node(
+                                data,
+                                (ship_source_index, ship),
+                                "thumbnail",
+                                2,
+                                ship_output_source,
+                            )
+                            .or(ship_sprite),
+                    },
+                );
+            });
     }
 }
