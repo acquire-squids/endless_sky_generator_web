@@ -27,13 +27,11 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            ~/.rustup/toolchains
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install wasm32-unknown-unknown target
         id: install_wasm_target
-        if: steps.cache.outputs.cache-hit != 'true'
         run: rustup target add wasm32-unknown-unknown
         
       - name: Install wasm-bindgen
