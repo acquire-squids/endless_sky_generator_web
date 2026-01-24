@@ -42,12 +42,12 @@ jobs:
 
       - name: Cargo clippy
         id: cargo_clippy
-        if: steps.cache.outputs.cache-hit != 'true'
+        # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo clippy --release
       
       - name: Build
         id: build
-        if: steps.cache.outputs.cache-hit != 'true'
+        # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo build --target wasm32-unknown-unknown --release
       
       - name: Run wasm-bindgen
