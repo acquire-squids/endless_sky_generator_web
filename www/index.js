@@ -3,7 +3,9 @@ import init from "./endless_sky_generator_web.js";
 import {
   generate_full_map,
   generate_system_shuffler,
-  SystemShufflerConfig
+  SystemShufflerConfig,
+  generate_chaos,
+  ChaosConfig
 } from "./endless_sky_generator_web.js";
 
 import { readFileAsText } from "./export_to_rust.js";
@@ -196,5 +198,45 @@ full_map_output.addEventListener("click", generateAndDownload("full_map.zip", ge
     }
 
     downloadZip("system_shuffler.zip", result);
+  });
+}
+
+{
+  const output = document.getElementById("chaos-output");
+
+  const seed = document.getElementById("chaos-seed");
+
+  output.addEventListener("click", async () => {
+    let errored = false;
+
+    if (!seed.checkValidity()) {
+      console.error("ERROR: Chaos seed is not a valid value");
+      errored = true;
+    }
+
+    if (errored) {
+      return;
+    }
+
+    const paths_and_sources = await getPathsAndSources();
+
+    let result;
+
+    try {
+      result = new Uint8Array(
+        generate_chaos(
+          paths_and_sources.paths,
+          paths_and_sources.sources,
+          new ChaosConfig(
+            seed.value,
+          )
+        )
+      );
+    } catch(error) {
+      console.error(error);
+      return;
+    }
+
+    downloadZip("chaos.zip", result);
   });
 }
