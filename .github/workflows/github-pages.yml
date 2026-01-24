@@ -63,7 +63,7 @@ jobs:
         id: data_cache
         with:
           path: endless-sky/data/
-          key: ${{ runner.os }}-endless-sky-${{ hashFiles('stable_version.txt') }}
+          key: ${{ runner.os }}-endless-sky-${{ hashFiles('www/stable_version.txt') }}
 
       - name: Include stable data
         if: steps.data_cache.outputs.cache-hit != 'true'

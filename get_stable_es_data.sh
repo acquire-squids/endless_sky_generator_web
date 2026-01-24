@@ -6,7 +6,7 @@ git clone \
   --no-checkout \
   --depth=1 \
   --filter=tree:0 \
-  --branch $(< "stable_version.txt") \
+  --branch $(< "www/stable_version.txt") \
   https://github.com/endless-sky/endless-sky.git
 
 cd endless-sky/

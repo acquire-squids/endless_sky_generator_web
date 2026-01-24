@@ -11,15 +11,26 @@
     </header>
     <div>
       <header>
-        <h2>READ ME</h2>
+        <h2>
+          <a id="READ_ME">READ ME</a>
+        </h2>
       </header>
-      <p>
-        <b>The generators will include the base game's data for version v0.10.16 by default.</b><br/>
-        If you don't want this, uncheck the "Include data from stable release" checkbox below.<br/><br/>
-        You can also try to include your own data files, if you'd like!  Use the "Choose an Endless Sky data folder" upload button.<br/>
-        If you wish to clear the data you've "uploaded", there is a button right below the upload button.<br/><br/>
-        These settings, and the uploaded files, <b>are not stored (to my knowledge) and must be repeated if you come back!</b><br/>
-      </p>
+      <div>
+        <p>
+          <b>The generators will include the base game's data for this version by default:</b>
+        </p>
+      </div>
+      <div>
+        <object type="text/plain" data="stable_version.txt" width=96 height=24>!!UNKNOWN!!</object>
+      </div>
+      <div>
+        <p>
+          If you don't want this, uncheck the "Include data from stable release" checkbox below.<br/><br/>
+          You can also try to include your own data files, if you'd like!  Use the "Upload your own data folder" button.<br/>
+          If you wish to clear the data you've "uploaded", there is a button right below the upload button.<br/><br/>
+          These settings, and the uploaded files, <b>are not stored (to my knowledge) and must be repeated if you come back!</b><br/>
+        </p>
+      </div>
       <div>
         <label>Include data from stable release:</label>
       </div>
@@ -41,7 +52,25 @@
     </div>
     <div>
       <header>
-        <h2>Full Map</h2>
+        <h3>Table of contents:</h3>
+      </header>
+      <ul>
+        <li>
+          <a href="#READ_ME">READ ME</a>
+        </li>
+        <li>
+          <a href="#Full_Map">Full Map</a>
+        </li>
+        <li>
+          <a href="#System_Shuffler">System Shuffler</a>
+        </li>
+      </ul>
+    </div>
+    <div>
+      <header>
+        <h2>
+          <a id="Full_Map">Full Map</a>
+        </h2>
       </header>
       <p>
         A plugin that reveals every system and planet in the uploaded data folder when activated by a job available in any job board.<br/><br/>
@@ -51,9 +80,9 @@
       <input id="full-map-output" type="button" value="Download"></input>
     </div>
     <div>
-      <header>
-        <h2>System Shuffler</h2>
-      </header>
+        <h2>
+          <a id="System_Shuffler">System Shuffler</a>
+        </h2>
       <p>
         A plugin that comes with preset randomizations of every system in the universe.<br/><br/>
         It will swap system positions but keep the shape and traversability of the universe the same.<br/>
@@ -66,7 +95,7 @@
         </ul>
         Additionally, you can request a shuffle or restore at any point through any job board.<br/><br/>
         <b>Be wary of repeated shuffling!</b><br/>
-        If you play on a version <b>before 0.10.17's unstable release</b>, event definitions are fully copied into your save file and <b>your save file has potential to explode in size!</b>
+        If you play on a version <b>before v0.10.17's unstable release</b>, event definitions are fully copied into your save file and <b>your save file has potential to explode in size!</b>
       </p>
       <div>
         <label>seed:</label>
