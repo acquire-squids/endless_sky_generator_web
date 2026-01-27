@@ -86,44 +86,6 @@ struct ShipData<'a> {
     thumbnail: Option<NodeIndex>,
 }
 
-fn copy_node(
-    data: &Data,
-    (source_index, node_index): (SourceIndex, NodeIndex),
-    output_data: &mut Data,
-    output_source: SourceIndex,
-) -> Option<NodeIndex> {
-    let tokens = data.get_tokens(node_index)?;
-
-    if tokens.is_empty() {
-        return None;
-    }
-
-    let output_node = output_data.insert_node(Node::Some { tokens: vec![] });
-
-    for token in tokens {
-        if let Some(lexeme) = data.get_lexeme(source_index, *token)
-            && let Some((span_start, span_end)) = output_data.push_source(output_source, lexeme)
-        {
-            output_data.push_token(
-                output_node,
-                Token::new(TokenKind::Symbol, Span::new(span_start, span_end)),
-            );
-        }
-    }
-
-    if let Some(children) = data.get_children(node_index) {
-        for child in children {
-            if let Some(output_child) =
-                copy_node(data, (source_index, *child), output_data, output_source)
-            {
-                output_data.push_child(output_node, output_child);
-            }
-        }
-    }
-
-    Some(output_node)
-}
-
 impl Chaos<'_> {
     fn zip_root_nodes<P: Into<PathBuf>>(
         &mut self,
@@ -158,11 +120,12 @@ impl Chaos<'_> {
             data.get_tokens(*node_index).map_or(0, <[Token]>::len) >= minimum_length
         })
         .filter_map(|node_index| {
-            copy_node(
+            generators::copy_node(
                 data,
                 (source_index, node_index),
                 &mut self.output_data,
                 output_source,
+                [].as_slice(),
             )
         })
         // TODO: don't collect?
@@ -382,7 +345,7 @@ impl Chaos<'_> {
                     OutfitData {
                         name:
                             node_path_iter!(data => (outfit_source_index, outfit); "display name")
-                                .filter_map(|node_index| {
+                                .filter_map(|(_, node_index)| {
                                     data.get_tokens(node_index).and_then(|tokens| {
                                         tokens.get(1).and_then(|token| {
                                             data.get_lexeme(outfit_source_index, *token)
@@ -434,7 +397,7 @@ impl Chaos<'_> {
                     ship_name,
                     ShipData {
                         name: node_path_iter!(data => (ship_source_index, ship); "display name")
-                            .filter_map(|node_index| {
+                            .filter_map(|(_, node_index)| {
                                 data.get_tokens(node_index).and_then(|tokens| {
                                     tokens.get(1).and_then(|token| {
                                         data.get_lexeme(ship_source_index, *token)
@@ -518,7 +481,7 @@ impl Chaos<'_> {
                     ship_variant,
                     ShipData {
                         name: node_path_iter!(data => (ship_source_index, ship); "display name")
-                            .filter_map(|node_index| {
+                            .filter_map(|(_, node_index)| {
                                 data.get_tokens(node_index).and_then(|tokens| {
                                     tokens.get(1).and_then(|token| {
                                         data.get_lexeme(ship_source_index, *token)

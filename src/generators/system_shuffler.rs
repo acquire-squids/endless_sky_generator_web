@@ -57,57 +57,6 @@ impl SystemShufflerConfig {
     }
 }
 
-fn copy_node(
-    data: &Data,
-    (source_index, node_index): (SourceIndex, NodeIndex),
-    output_data: &mut Data,
-    output_source: SourceIndex,
-    allow_object: bool,
-) -> Option<NodeIndex> {
-    let tokens = data.get_tokens(node_index)?;
-
-    if tokens.is_empty() {
-        return None;
-    }
-
-    let output_node = output_data.insert_node(Node::Some { tokens: vec![] });
-
-    for token in tokens {
-        if let Some(lexeme) = data.get_lexeme(source_index, *token)
-            && let Some((span_start, span_end)) = output_data.push_source(output_source, lexeme)
-        {
-            output_data.push_token(
-                output_node,
-                Token::new(TokenKind::Symbol, Span::new(span_start, span_end)),
-            );
-        }
-    }
-
-    if let Some(children) = data.get_children(node_index) {
-        for child in children {
-            if (allow_object
-                || data
-                    .get_tokens(*child)
-                    .and_then(|tokens| tokens.first())
-                    .and_then(|t| data.get_lexeme(source_index, *t))
-                    .unwrap_or_default()
-                    != "object")
-                && let Some(output_child) = copy_node(
-                    data,
-                    (source_index, *child),
-                    output_data,
-                    output_source,
-                    allow_object,
-                )
-            {
-                output_data.push_child(output_node, output_child);
-            }
-        }
-    }
-
-    Some(output_node)
-}
-
 struct SystemShuffler<'a> {
     archive: Zip<'a>,
     output_data: Data,
@@ -1193,12 +1142,12 @@ impl SystemShuffler<'_> {
         node_value: &(NodeAction, SourceIndex, NodeIndex),
         shuffle_event_source: SourceIndex,
     ) -> NodeIndex {
-        copy_node(
+        generators::copy_node(
             data,
             (node_value.1, node_value.2),
             &mut self.output_data,
             shuffle_event_source,
-            true,
+            [].as_slice(),
         )
         .expect("Pos data must be verified in previous steps")
     }
@@ -1211,12 +1160,12 @@ impl SystemShuffler<'_> {
         is_adding: bool,
     ) -> NodeIndex {
         if is_adding {
-            copy_node(
+            generators::copy_node(
                 data,
                 (node_value.1, node_value.2),
                 &mut self.output_data,
                 shuffle_event_source,
-                true,
+                [].as_slice(),
             )
             .expect("Jump range data must be verified in previous steps")
         } else {
@@ -1296,12 +1245,16 @@ impl SystemShuffler<'_> {
         shuffle_event_source: SourceIndex,
         is_adding: bool,
     ) -> NodeIndex {
-        let modified_object = copy_node(
+        let modified_object = generators::copy_node(
             data,
             (node_value.1, node_value.2),
             &mut self.output_data,
             shuffle_event_source,
-            is_adding,
+            if is_adding {
+                [].as_slice()
+            } else {
+                ["object"].as_slice()
+            },
         )
         .expect("Object data must be verified in previous steps");
 
@@ -1342,12 +1295,12 @@ impl SystemShuffler<'_> {
         is_adding: bool,
     ) -> NodeIndex {
         if is_adding {
-            let modified_copy = copy_node(
+            let modified_copy = generators::copy_node(
                 data,
                 (node_value.1, node_value.2),
                 &mut self.output_data,
                 shuffle_event_source,
-                true,
+                [].as_slice(),
             )
             .expect("Data must be verified in previous steps");
 
@@ -1383,7 +1336,7 @@ fn find_wormholes_from_planets<'a>(data: &'a Data, wormholes: &mut HashSet<&'a s
                     .unwrap_or_default()
                     .is_empty()
                 && node_path_iter!(data => (*source_index, *node_index); "wormhole")
-                    .filter(|&node_index| {
+                    .filter(|&(_, node_index)| {
                         data.get_tokens(node_index).unwrap_or_default().len() >= 2
                     })
                     .next()
@@ -1508,8 +1461,7 @@ fn find_persistent_event_nodes<'a>(
 
         data_from_node(
             data,
-            node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink")
-                .map(|n| (source_index, n)),
+            node_path_iter!(&data => (source_index, node_index); "system" | "wormhole" | "link" | "unlink"),
             system_names,
             (planets, wormholes),
             &mut event_map,

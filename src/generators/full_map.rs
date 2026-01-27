@@ -21,7 +21,7 @@ fn find_named_objects<'a>(
     node_index: NodeIndex,
     names: &mut Vec<&'a str>,
 ) {
-    for object in node_path_iter!(data => (source_index, node_index); "object") {
+    for (_, object) in node_path_iter!(data => (source_index, node_index); "object") {
         if let Some(tokens) = data.get_tokens(object)
             && tokens.len() >= 2
             && let Some(name) = data.get_lexeme(source_index, tokens[1])
