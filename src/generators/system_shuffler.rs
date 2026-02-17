@@ -828,7 +828,11 @@ impl SystemShuffler<'_> {
         persistent_node_keys.sort_unstable();
 
         for (original_kind, original) in persistent_node_keys {
-            let replacement = system_swaps.get(original).map_or(original, |swap| swap);
+            let replacement = if original_kind == "system" {
+                system_swaps.get(original).map_or(original, |swap| swap)
+            } else {
+                original
+            };
 
             let (removals, additions) = self.modify_node(
                 (original_kind, original),
