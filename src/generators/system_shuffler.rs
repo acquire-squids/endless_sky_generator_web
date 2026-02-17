@@ -839,39 +839,42 @@ impl SystemShuffler<'_> {
             );
 
             // do everything but links first in case `remove link` is one of the removals or additions
-            //
-            // this block is kind of ugly, in a beautiful way
-            let nodes_with_parent = removals
+            let modified_nodes = removals
                 .iter()
                 .filter(|&&node_index| {
-                    !matches!(
-                        self.output_data
-                            .get_tokens(node_index)
-                            .and_then(|tokens| self
-                                .output_data
-                                .get_lexeme(shuffle_event_source, tokens[0])),
-                        Some("link" | "unlink")
-                    )
+                    !self.output_node_is_additive_link((shuffle_event_source, node_index))
                 })
-                .map(|&node_index| (false, node_index))
+                .map(|&node_index| (false, None, node_index))
                 .chain(
                     additions
                         .iter()
                         .filter(|&&node_index| {
-                            !matches!(
-                                self.output_data
-                                    .get_tokens(node_index)
-                                    .and_then(|tokens| self
-                                        .output_data
-                                        .get_lexeme(shuffle_event_source, tokens[0])),
-                                Some("link" | "unlink")
-                            )
+                            !self.output_node_is_additive_link((shuffle_event_source, node_index))
                         })
-                        .map(|&node_index| (true, node_index)),
+                        .map(|&node_index| (true, None, node_index)),
+                )
+                .chain(
+                    removals
+                        .iter()
+                        .filter(|&&node_index| {
+                            self.output_node_is_additive_link((shuffle_event_source, node_index))
+                        })
+                        .map(|&node_index| (false, Some(shuffle_event_restore), node_index)),
+                )
+                .chain(
+                    additions
+                        .iter()
+                        .filter(|&&node_index| {
+                            self.output_node_is_additive_link((shuffle_event_source, node_index))
+                        })
+                        .map(|&node_index| (true, Some(shuffle_event_activate), node_index)),
                 )
                 .collect::<Vec<_>>();
 
-            if !nodes_with_parent.is_empty() {
+            if modified_nodes
+                .iter()
+                .any(|(_, known_parent, _)| known_parent.is_none())
+            {
                 let parent_restore = tree_from_tokens!(
                     &mut self.output_data; shuffle_event_source =>
                     : original_kind, replacement ;
@@ -882,62 +885,56 @@ impl SystemShuffler<'_> {
                     : original_kind, replacement ;
                 );
 
-                for (activate, modification) in nodes_with_parent {
+                for (activate, _, modification) in modified_nodes
+                    .iter()
+                    .filter(|(_, known_parent, _)| known_parent.is_none())
+                {
                     self.output_data.push_child(
-                        if activate {
+                        if *activate {
                             parent_activate
                         } else {
                             parent_restore
                         },
-                        modification,
+                        *modification,
                     );
                 }
 
                 self.output_data
                     .push_child(shuffle_event_restore, parent_restore);
+
                 self.output_data
                     .push_child(shuffle_event_activate, parent_activate);
             }
 
-            // copy and paste for now, I can always make it better later
-            // TODO: don't copy and paste
-            //
-            // TODO: don't collect?
-            #[allow(clippy::needless_collect)]
-            for (modification_parent, modification) in removals
-                .iter()
-                .filter(|&&node_index| {
-                    matches!(
-                        self.output_data
-                            .get_tokens(node_index)
-                            .and_then(|tokens| self
-                                .output_data
-                                .get_lexeme(shuffle_event_source, tokens[0])),
-                        Some("link" | "unlink")
-                    )
-                })
-                .map(|&node_index| (shuffle_event_restore, node_index))
-                .chain(
-                    additions
-                        .iter()
-                        .filter(|&&node_index| {
-                            matches!(
-                                self.output_data
-                                    .get_tokens(node_index)
-                                    .and_then(|tokens| self
-                                        .output_data
-                                        .get_lexeme(shuffle_event_source, tokens[0])),
-                                Some("link" | "unlink")
-                            )
-                        })
-                        .map(|&node_index| (shuffle_event_activate, node_index)),
-                )
-                .collect::<Vec<_>>()
+            for (_, known_parent, modification) in
+                modified_nodes
+                    .into_iter()
+                    .filter_map(|(activate, known_parent, modification)| {
+                        Some((activate, known_parent?, modification))
+                    })
             {
-                self.output_data
-                    .push_child(modification_parent, modification);
+                self.output_data.push_child(known_parent, modification);
             }
         }
+    }
+
+    fn output_node_is_additive_link(
+        &self,
+        (source_index, node_index): (SourceIndex, NodeIndex),
+    ) -> bool {
+        matches!(
+            self.output_data
+                .get_tokens(node_index)
+                .and_then(|tokens| {
+                    if tokens.len() >= 3 {
+                        tokens.first()
+                    } else {
+                        None
+                    }
+                })
+                .and_then(|token| self.output_data.get_lexeme(source_index, *token)),
+            Some("link" | "unlink")
+        )
     }
 
     fn side_event_conditions(

@@ -107,8 +107,8 @@ impl Chaos<'_> {
         kind: &str,
         minimum_length: usize,
         output_source: SourceIndex,
-    ) -> Vec<NodeIndex> {
-        data.filter_children(source_index, node_index, |source_index, tokens| {
+    ) -> impl Iterator<Item = NodeIndex> {
+        data.filter_children(source_index, node_index, move |source_index, tokens| {
             matches!(
                 tokens
                     .first()
@@ -116,10 +116,10 @@ impl Chaos<'_> {
                 Some(lexeme) if lexeme == kind
             )
         })
-        .filter(|node_index| {
+        .filter(move |node_index| {
             data.get_tokens(*node_index).map_or(0, <[Token]>::len) >= minimum_length
         })
-        .filter_map(|node_index| {
+        .filter_map(move |node_index| {
             generators::copy_node(
                 data,
                 (source_index, node_index),
@@ -128,8 +128,6 @@ impl Chaos<'_> {
                 [].as_slice(),
             )
         })
-        // TODO: don't collect?
-        .collect::<Vec<_>>()
     }
 
     fn get_copy_of_child_node(
@@ -147,7 +145,6 @@ impl Chaos<'_> {
             minimum_length,
             output_source,
         )
-        .into_iter()
         .last()
     }
 
