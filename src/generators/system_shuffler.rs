@@ -1042,19 +1042,20 @@ impl SystemShuffler<'_> {
                             ));
 
                     match *node_kind {
-                        "pos" => {
-                            modified_nodes.push(self.modify_pos(
+                        "pos" | "government" => {
+                            modified_nodes.push(self.modify_copy(
                                 data,
                                 node_value,
                                 shuffle_event_source,
                             ));
                         }
                         "jump range" => {
-                            modified_nodes.push(self.modify_jump_range(
+                            modified_nodes.push(self.modify_zeroed(
                                 data,
                                 node_value,
                                 shuffle_event_source,
                                 is_adding,
+                                node_kind,
                             ));
                         }
                         "link" | "unlink" => {
@@ -1129,15 +1130,15 @@ impl SystemShuffler<'_> {
                 .expect("Only nodes with at least one token should be modified"),
         ) {
             (a, b) if a == b => Ordering::Equal,
-            ("pos", _) => Ordering::Less,
-            (_, "pos") => Ordering::Greater,
+            ("pos" | "government", _) => Ordering::Less,
+            (_, "pos" | "government") => Ordering::Greater,
             (_, "add" | "link") | ("remove" | "unlink", _) => Ordering::Less,
             ("add" | "link", _) | (_, "remove" | "unlink") => Ordering::Greater,
             (_, _) => Ordering::Equal,
         }
     }
 
-    fn modify_pos(
+    fn modify_copy(
         &mut self,
         data: &Data,
         node_value: &(NodeAction, SourceIndex, NodeIndex),
@@ -1150,15 +1151,16 @@ impl SystemShuffler<'_> {
             shuffle_event_source,
             [].as_slice(),
         )
-        .expect("Pos data must be verified in previous steps")
+        .expect("Data must be verified in previous steps")
     }
 
-    fn modify_jump_range(
+    fn modify_zeroed(
         &mut self,
         data: &Data,
         node_value: &(NodeAction, SourceIndex, NodeIndex),
         shuffle_event_source: SourceIndex,
         is_adding: bool,
+        zeroed: &str,
     ) -> NodeIndex {
         if is_adding {
             generators::copy_node(
@@ -1172,7 +1174,7 @@ impl SystemShuffler<'_> {
         } else {
             tree_from_tokens!(
                 &mut self.output_data; shuffle_event_source =>
-                : "jump range", "0" ;
+                : zeroed, "0" ;
             )
         }
     }
@@ -1246,7 +1248,7 @@ impl SystemShuffler<'_> {
         shuffle_event_source: SourceIndex,
         is_adding: bool,
     ) -> NodeIndex {
-        let modified_object = generators::copy_node(
+        let modified_object = generators::copy_node_allow_or_deny(
             data,
             (node_value.1, node_value.2),
             &mut self.output_data,
@@ -1254,8 +1256,9 @@ impl SystemShuffler<'_> {
             if is_adding {
                 [].as_slice()
             } else {
-                ["object"].as_slice()
+                ["sprite", "distance", "period", "offset"].as_slice()
             },
+            !is_adding,
         )
         .expect("Object data must be verified in previous steps");
 
@@ -1620,22 +1623,7 @@ fn data_from_node<'a>(
             _ => {}
         }
 
-        for node_kind in match original_node_kind {
-            // TODO: find a way for this to work without crashing the game (may be impossible for a plugin)
-            // (wormhole logic can be removed if it is possible)
-            // ["object", "hazard", "arrival", "departure"].as_slice(),
-            "system" => [
-                "pos",
-                "link",
-                "jump range",
-                "inaccessible",
-                "hidden",
-                "shrouded",
-            ]
-            .as_slice(),
-            "wormhole" => ["link"].as_slice(),
-            _ => [].as_slice(),
-        } {
+        for node_kind in interesting_nested_data(original_node_kind) {
             for child in data.filter_children(source_index, node_index, |source_index, tokens| {
                 let key_index = usize::from(matches!(
                     tokens
@@ -1677,5 +1665,22 @@ fn data_from_node<'a>(
                 );
             }
         }
+    }
+}
+
+fn interesting_nested_data(original_node_kind: &str) -> &'static [&'static str] {
+    match original_node_kind {
+        "system" => [
+            "pos",
+            // "government",
+            "link",
+            "jump range",
+            "inaccessible",
+            "hidden",
+            "shrouded",
+        ]
+        .as_slice(),
+        "wormhole" => ["link"].as_slice(),
+        _ => [].as_slice(),
     }
 }

@@ -61,6 +61,42 @@ fn copy_node(
     output_source: SourceIndex,
     disallowed_children: &[&str],
 ) -> Option<NodeIndex> {
+    copy_node_allow_or_deny(
+        data,
+        (source_index, node_index),
+        output_data,
+        output_source,
+        disallowed_children,
+        false,
+    )
+}
+
+#[allow(dead_code)]
+fn copy_node_allow(
+    data: &Data,
+    (source_index, node_index): (SourceIndex, NodeIndex),
+    output_data: &mut Data,
+    output_source: SourceIndex,
+    allowed_children: &[&str],
+) -> Option<NodeIndex> {
+    copy_node_allow_or_deny(
+        data,
+        (source_index, node_index),
+        output_data,
+        output_source,
+        allowed_children,
+        true,
+    )
+}
+
+fn copy_node_allow_or_deny(
+    data: &Data,
+    (source_index, node_index): (SourceIndex, NodeIndex),
+    output_data: &mut Data,
+    output_source: SourceIndex,
+    child_list: &[&str],
+    allow: bool,
+) -> Option<NodeIndex> {
     let tokens = data.get_tokens(node_index)?;
 
     if tokens.is_empty() {
@@ -86,13 +122,15 @@ fn copy_node(
                 .get_tokens(*child)
                 .and_then(|tokens| tokens.first())
                 .and_then(|t| data.get_lexeme(source_index, *t))
-                && !disallowed_children.contains(&lexeme)
-                && let Some(output_child) = copy_node(
+                && ((allow && child_list.contains(&lexeme))
+                    || (!allow && !child_list.contains(&lexeme)))
+                && let Some(output_child) = copy_node_allow_or_deny(
                     data,
                     (source_index, *child),
                     output_data,
                     output_source,
-                    disallowed_children,
+                    child_list,
+                    allow,
                 )
             {
                 output_data.push_child(output_node, output_child);
