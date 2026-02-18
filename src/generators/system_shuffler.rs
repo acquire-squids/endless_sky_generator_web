@@ -960,56 +960,62 @@ impl SystemShuffler<'_> {
             ;
         );
 
-        if should_activate {
-            let condition2 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
+        let condition2 = tree_from_tokens!(
+            &mut self.output_data; shuffle_event_source =>
+            : "or" ;
+            {
                 :
-                    format!("event: {activate_name}: {event_name}"),
                     if invert {
-                        "=="
+                        "has"
                     } else {
-                        "!="
+                        "not"
                     },
-                    format!("event: {event_name}")
+                    if should_activate {
+                        format!("event: {activate_name}: {event_name}")
+                    } else {
+                        format!("event: {restore_name}: {event_name}")
+                    }
                 ;
-            );
-
-            let action1 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
-                : "event", format!("{activate_name}: {event_name}"), "0" ;
-            );
-
-            let action2 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
-                : format!("event: {activate_name}: {event_name}"), "=", format!("event: {event_name}") ;
-            );
-
-            ((condition1, condition2), (action1, action2))
-        } else {
-            let condition2 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
                 :
                     if invert {
                         "not"
                     } else {
                         "has"
                     },
-                    format!("event: {activate_name}: {event_name}")
+                    if should_activate {
+                        format!("event: {restore_name}: {event_name}")
+                    } else {
+                        format!("event: {activate_name}: {event_name}")
+                    }
                 ;
-            );
+            }
+        );
 
-            let action1 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
-                : "event", format!("{restore_name}: {event_name}"), "0" ;
-            );
+        let (action1, action2) = if should_activate {
+            (
+                tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "event", format!("{activate_name}: {event_name}"), "0" ;
+                ),
+                tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : format!("event: {restore_name}: {event_name}"), "=", "0" ;
+                ),
+            )
+        } else {
+            (
+                tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : "event", format!("{restore_name}: {event_name}"), "0" ;
+                ),
+                tree_from_tokens!(
+                    &mut self.output_data; shuffle_event_source =>
+                    : format!("event: {activate_name}: {event_name}"), "=", "0" ;
+                ),
+            )
+        };
 
-            let action2 = tree_from_tokens!(
-                &mut self.output_data; shuffle_event_source =>
-                : format!("event: {activate_name}: {event_name}"), "=", "0" ;
-            );
-
-            ((condition1, condition2), (action1, action2))
-        }
+        ((condition1, condition2), (action1, action2))
     }
 
     fn modify_node(
