@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "System Shuffler";
 
-const PLUGIN_VERSION: &str = "0.4.0";
+const PLUGIN_VERSION: &str = "0.4.1";
 
 const INSTALLED: &str = "System Shuffler: Installed";
 const CURRENT_PRESET: &str = "System Shuffler: Current Preset";
@@ -121,6 +121,8 @@ pub fn process(
             (&persistent_event_node_keys, &persistent_event_nodes),
         )?;
     }
+
+    generator.initial_backpatch_missions(persistent_event_node_keys.as_slice())?;
 
     generator.archive.finish()?;
 
@@ -229,7 +231,7 @@ impl SystemShuffler<'_> {
 
         let main_mission = tree_from_tokens!(
             &mut self.output_data; main_mission_source =>
-            : "mission", "zzzzz System Shuffler: Select Preset" ;
+            : "mission", "AAAAA System Shuffler: Select Preset" ;
             {
                 : "invisible" ;
                 : "repeat" ;
@@ -320,20 +322,10 @@ impl SystemShuffler<'_> {
         self.output_data
             .push_child(main_mission_on_offer, main_mission_conversation);
 
-        self.conditional_events(
-            (main_mission_source, main_mission_conversation),
-            (false, RESTORE_PREFIX, "restore"),
-            persistent_event_node_keys,
-        );
-
-        let preset_selection = self.select_preset(main_mission_source, false);
-
-        self.output_data
-            .push_child(main_mission_conversation, preset_selection);
-
-        self.conditional_events(
-            (main_mission_source, main_mission_conversation),
-            (true, ACTIVATE_PREFIX, "activate"),
+        self.restore_and_activate(
+            main_mission_source,
+            main_mission_conversation,
+            false,
             persistent_event_node_keys,
         );
 
@@ -344,6 +336,36 @@ impl SystemShuffler<'_> {
 
         self.output_data
             .push_child(main_mission_on_offer, main_failure);
+    }
+
+    fn restore_and_activate(
+        &mut self,
+        source: SourceIndex,
+        node: NodeIndex,
+        reset: bool,
+        persistent_event_node_keys: &[&str],
+    ) {
+        for preset_index in 0..=(self.settings.max_presets) {
+            self.conditional_events(
+                (source, node),
+                (false, RESTORE_PREFIX, "restore"),
+                persistent_event_node_keys,
+                preset_index,
+            );
+        }
+
+        let preset_selection = self.select_preset(source, reset);
+
+        self.output_data.push_child(node, preset_selection);
+
+        for preset_index in 0..=(self.settings.max_presets) {
+            self.conditional_events(
+                (source, node),
+                (true, ACTIVATE_PREFIX, "activate"),
+                persistent_event_node_keys,
+                preset_index,
+            );
+        }
     }
 
     fn select_preset(&mut self, source: SourceIndex, reset: bool) -> NodeIndex {
@@ -375,7 +397,7 @@ impl SystemShuffler<'_> {
 
         let restore_job = tree_from_tokens!(
             &mut self.output_data; restore_job_source =>
-            : "mission", "zzzzz System Shuffler: Restore Universe" ;
+            : "mission", "System Shuffler: Restore Universe" ;
             {
                 : "name", "Unshuffle the universe" ;
                 : "description", "Restore all systems in the universe to how they should be, free of charge." ;
@@ -417,20 +439,10 @@ impl SystemShuffler<'_> {
         self.output_data
             .push_child(restore_job_on_accept, restore_job_conversation);
 
-        self.conditional_events(
-            (restore_job_source, restore_job_conversation),
-            (false, RESTORE_PREFIX, "restore"),
-            persistent_event_node_keys,
-        );
-
-        let preset_selection = self.select_preset(restore_job_source, true);
-
-        self.output_data
-            .push_child(restore_job_conversation, preset_selection);
-
-        self.conditional_events(
-            (restore_job_source, restore_job_conversation),
-            (true, ACTIVATE_PREFIX, "activate"),
+        self.restore_and_activate(
+            restore_job_source,
+            restore_job_conversation,
+            true,
             persistent_event_node_keys,
         );
 
@@ -448,7 +460,7 @@ impl SystemShuffler<'_> {
 
         let manual_job = tree_from_tokens!(
             &mut self.output_data; manual_job_source =>
-            : "mission", "zzzzz System Shuffler: Manual Shuffle" ;
+            : "mission", "System Shuffler: Manual Shuffle" ;
             {
                 : "name", "Shuffle the universe" ;
                 : "description", format!("Shuffle all systems in the universe to one of {} presets.", self.settings.max_presets).as_str() ;
@@ -479,20 +491,10 @@ impl SystemShuffler<'_> {
         self.output_data
             .push_child(manual_job_on_accept, manual_job_conversation);
 
-        self.conditional_events(
-            (manual_job_source, manual_job_conversation),
-            (false, RESTORE_PREFIX, "restore"),
-            persistent_event_node_keys,
-        );
-
-        let preset_selection = self.select_preset(manual_job_source, false);
-
-        self.output_data
-            .push_child(manual_job_conversation, preset_selection);
-
-        self.conditional_events(
-            (manual_job_source, manual_job_conversation),
-            (true, ACTIVATE_PREFIX, "activate"),
+        self.restore_and_activate(
+            manual_job_source,
+            manual_job_conversation,
+            false,
             persistent_event_node_keys,
         );
 
@@ -572,7 +574,7 @@ impl SystemShuffler<'_> {
         {
             let output_root_node_count = self.output_data.root_nodes().len();
 
-            for &event_name in persistent_event_nodes.keys() {
+            for &event_name in persistent_event_node_keys {
                 self.backpatch_mission(
                     shuffle_event_source,
                     preset_index,
@@ -696,15 +698,15 @@ impl SystemShuffler<'_> {
             self.output_data
                 .push_child(shuffle_mission, mission_on_offer);
 
-            let ((condition1, condition2), (action1, action2)) = self.side_event_conditions(
+            let (condition, (action1, action2)) = self.side_event_conditions(
                 event_name,
                 (restore_name, activate_name),
-                (should_activate, false),
+                should_activate,
                 shuffle_event_source,
+                preset_index,
             );
 
-            self.output_data.push_child(mission_to_offer, condition1);
-            self.output_data.push_child(mission_to_offer, condition2);
+            self.output_data.push_child(mission_to_offer, condition);
 
             self.output_data.push_child(mission_on_offer, action1);
             self.output_data.push_child(mission_on_offer, action2);
@@ -724,75 +726,99 @@ impl SystemShuffler<'_> {
         (source, parent): (SourceIndex, NodeIndex),
         (should_activate, event_name_prefix, label_suffix): (bool, &str, &str),
         persistent_event_node_keys: &[&str],
+        preset_index: u8,
     ) {
-        for preset_index in 0..=(self.settings.max_presets) {
-            let skip_label = format!("not {preset_index} {label_suffix}");
+        let run_label = format!("has {preset_index} {label_suffix}");
+        let skip_label = format!("not {preset_index} {label_suffix}");
+
+        let event_branch = tree_from_tokens!(
+            &mut self.output_data; source =>
+            : "branch", run_label.as_str() ;
+            {
+                : CURRENT_PRESET, "==", preset_index ;
+            }
+        );
+
+        self.output_data.push_child(parent, event_branch);
+
+        let event_branch = tree_from_tokens!(
+            &mut self.output_data; source =>
+            : "branch", skip_label.as_str() ;
+            {
+                : "not", "never" ;
+            }
+        );
+
+        self.output_data.push_child(parent, event_branch);
+
+        let event_label = tree_from_tokens!(
+            &mut self.output_data; source =>
+            : "label", run_label.as_str() ;
+        );
+
+        self.output_data.push_child(parent, event_label);
+
+        let event_action = tree_from_tokens!(
+            &mut self.output_data; source =>
+            : "action" ;
+            {
+                : "event", format!("{event_name_prefix} {preset_index}"), "0" ;
+            }
+        );
+
+        if should_activate {
+            self.output_data.push_child(parent, event_action);
+        }
+
+        for &event_name in persistent_event_node_keys {
+            let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
+            let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
+
+            let run_label = format!("has {preset_index} {label_suffix} {event_name}");
+            let skip_label = format!("not {preset_index} {label_suffix} {event_name}");
+
+            let (condition, (action1, action2)) = self.side_event_conditions(
+                event_name,
+                (restore_name.as_str(), activate_name.as_str()),
+                should_activate,
+                source,
+                usize::from(preset_index),
+            );
+
+            let event_branch = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "branch", run_label.as_str() ;
+            );
+
+            self.output_data.push_child(event_branch, condition);
+
+            self.output_data.push_child(parent, event_branch);
 
             let event_branch = tree_from_tokens!(
                 &mut self.output_data; source =>
                 : "branch", skip_label.as_str() ;
                 {
-                    : CURRENT_PRESET, "!=", preset_index ;
+                    : "not", "never" ;
                 }
             );
 
             self.output_data.push_child(parent, event_branch);
 
+            let event_label = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "label", run_label.as_str() ;
+            );
+
+            self.output_data.push_child(parent, event_label);
+
             let event_action = tree_from_tokens!(
                 &mut self.output_data; source =>
                 : "action" ;
-                {
-                    : "event", format!("{event_name_prefix} {preset_index}"), "0" ;
-                }
             );
 
-            if should_activate {
-                self.output_data.push_child(parent, event_action);
-            }
-
-            for &event_name in persistent_event_node_keys {
-                let restore_name = format!("{RESTORE_PREFIX} {preset_index}");
-                let activate_name = format!("{ACTIVATE_PREFIX} {preset_index}");
-
-                let skip_label = format!("not {preset_index} {label_suffix} {event_name}");
-
-                let ((condition1, condition2), (action1, action2)) = self.side_event_conditions(
-                    event_name,
-                    (restore_name.as_str(), activate_name.as_str()),
-                    (should_activate, true),
-                    source,
-                );
-
-                let event_branch = tree_from_tokens!(
-                    &mut self.output_data; source =>
-                    : "branch", skip_label.as_str() ;
-                );
-
-                self.output_data.push_child(parent, event_branch);
-
-                self.output_data.push_child(event_branch, condition1);
-                self.output_data.push_child(event_branch, condition2);
-
-                let event_action = tree_from_tokens!(
-                    &mut self.output_data; source =>
-                    : "action" ;
-                );
-
-                self.output_data.push_child(parent, event_action);
-                self.output_data.push_child(event_action, action1);
-                self.output_data.push_child(event_action, action2);
-
-                let event_label = tree_from_tokens!(
-                    &mut self.output_data; source =>
-                    : "label", skip_label.as_str() ;
-                );
-
-                self.output_data.push_child(parent, event_label);
-            }
-
-            if !should_activate {
-                self.output_data.push_child(parent, event_action);
-            }
+            self.output_data.push_child(parent, event_action);
+            self.output_data.push_child(event_action, action1);
+            self.output_data.push_child(event_action, action2);
 
             let event_label = tree_from_tokens!(
                 &mut self.output_data; source =>
@@ -800,18 +826,29 @@ impl SystemShuffler<'_> {
             );
 
             self.output_data.push_child(parent, event_label);
+        }
 
-            if preset_index == self.settings.max_presets {
-                let blank_action = tree_from_tokens!(
-                    &mut self.output_data; source =>
-                    : "action" ;
-                    {
-                        : CURRENT_PRESET, "=", CURRENT_PRESET ;
-                    }
-                );
+        if !should_activate {
+            self.output_data.push_child(parent, event_action);
+        }
 
-                self.output_data.push_child(parent, blank_action);
-            }
+        let event_label = tree_from_tokens!(
+            &mut self.output_data; source =>
+            : "label", skip_label.as_str() ;
+        );
+
+        self.output_data.push_child(parent, event_label);
+
+        if preset_index == self.settings.max_presets {
+            let blank_action = tree_from_tokens!(
+                &mut self.output_data; source =>
+                : "action" ;
+                {
+                    : CURRENT_PRESET, "=", CURRENT_PRESET ;
+                }
+            );
+
+            self.output_data.push_child(parent, blank_action);
         }
     }
 
@@ -945,77 +982,139 @@ impl SystemShuffler<'_> {
         &mut self,
         event_name: &str,
         (restore_name, activate_name): (&str, &str),
-        (should_activate, invert): (bool, bool),
+        should_activate: bool,
         shuffle_event_source: SourceIndex,
-    ) -> ((NodeIndex, NodeIndex), (NodeIndex, NodeIndex)) {
-        let condition1 = tree_from_tokens!(
+        preset_index: usize,
+    ) -> (NodeIndex, (NodeIndex, NodeIndex)) {
+        let condition = tree_from_tokens!(
             &mut self.output_data; shuffle_event_source =>
-            :
-                if invert {
-                    "not"
-                } else {
-                    "has"
-                },
-                format!("event: {event_name}")
-            ;
-        );
-
-        let condition2 = tree_from_tokens!(
-            &mut self.output_data; shuffle_event_source =>
-            : "or" ;
+            : "and" ;
             {
+                : CURRENT_PRESET, "==", preset_index ;
                 :
-                    if invert {
-                        "has"
-                    } else {
-                        "not"
-                    },
-                    if should_activate {
-                        format!("event: {activate_name}: {event_name}")
-                    } else {
-                        format!("event: {restore_name}: {event_name}")
-                    }
+                    "has",
+                    format!("event: {event_name}")
                 ;
                 :
-                    if invert {
-                        "not"
-                    } else {
-                        "has"
-                    },
+                    "not",
                     if should_activate {
-                        format!("event: {restore_name}: {event_name}")
-                    } else {
                         format!("event: {activate_name}: {event_name}")
+                    } else {
+                        format!("event: {restore_name}: {event_name}")
                     }
                 ;
             }
         );
 
-        let (action1, action2) = if should_activate {
-            (
-                tree_from_tokens!(
-                    &mut self.output_data; shuffle_event_source =>
-                    : "event", format!("{activate_name}: {event_name}"), "0" ;
-                ),
-                tree_from_tokens!(
-                    &mut self.output_data; shuffle_event_source =>
-                    : format!("event: {restore_name}: {event_name}"), "=", "0" ;
-                ),
-            )
-        } else {
-            (
-                tree_from_tokens!(
-                    &mut self.output_data; shuffle_event_source =>
-                    : "event", format!("{restore_name}: {event_name}"), "0" ;
-                ),
-                tree_from_tokens!(
-                    &mut self.output_data; shuffle_event_source =>
-                    : format!("event: {activate_name}: {event_name}"), "=", "0" ;
-                ),
-            )
-        };
+        let (action1, action2) = (
+            tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                :
+                    "event",
+                    format!(
+                        "{}: {event_name}",
+                        if should_activate {
+                            activate_name
+                        } else {
+                            restore_name
+                        }
+                    ),
+                    "0"
+                ;
+            ),
+            tree_from_tokens!(
+                &mut self.output_data; shuffle_event_source =>
+                :
+                    format!(
+                        "event: {}: {event_name}",
+                        if should_activate {
+                            restore_name
+                        } else {
+                            activate_name
+                        }
+                    ),
+                    "=",
+                    "0"
+                ;
+            ),
+        );
 
-        ((condition1, condition2), (action1, action2))
+        (condition, (action1, action2))
+    }
+
+    fn initial_backpatch_missions(
+        &mut self,
+        persistent_event_node_keys: &[&str],
+    ) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+
+        let backpatch_source = self.output_data.insert_source(String::new());
+
+        for event_name in persistent_event_node_keys {
+            let mission_name = format!("aaaaa System Shuffler Initial Backpatch: {event_name}");
+            let restore_name = format!("{RESTORE_PREFIX} 0");
+
+            let backpatch_mission = tree_from_tokens!(
+                &mut self.output_data; backpatch_source  =>
+                : "mission", mission_name.as_str() ;
+                {
+                    : "invisible" ;
+                    // : "repeat" ;
+                    : "non-blocking" ;
+                    : "landing" ;
+                    : "offer precedence", "1000000" ;
+                }
+            );
+
+            self.output_data
+                .push_root_node(backpatch_source, backpatch_mission);
+
+            let mission_to_offer = tree_from_tokens!(
+                &mut self.output_data; backpatch_source =>
+                : "to", "offer" ;
+                {
+                    : "and" ;
+                    {
+                        :
+                            "has",
+                            format!("event: {event_name}")
+                        ;
+                        :
+                            "not",
+                            format!("event: {mission_name}")
+                        ;
+                    }
+                }
+            );
+
+            self.output_data
+                .push_child(backpatch_mission, mission_to_offer);
+
+            let mission_on_offer = tree_from_tokens!(
+                &mut self.output_data; backpatch_source =>
+                : "on", "offer" ;
+                {
+                    :
+                        "event",
+                        format!("{restore_name}: {event_name}"),
+                        "0"
+                    ;
+                    :
+                        format!("event: {restore_name}: {event_name}"),
+                        "=",
+                        "0"
+                    ;
+                }
+            );
+
+            self.output_data
+                .push_child(backpatch_mission, mission_on_offer);
+        }
+
+        self.zip_root_nodes(
+            "data/initial_backpatch_missions.txt",
+            output_root_node_count,
+        )
     }
 
     fn modify_node(
