@@ -1,24 +1,137 @@
 #![allow(dead_code)]
 // it's random with a W because I got the algorithm from Wikipedia
-pub trait ShuffleIndex {
-    fn shuffled_indices(&self, seed: usize) -> Vec<usize>;
-}
+pub mod shuffle_index {
+    use super::XoShiRo256SS;
 
-impl<T> ShuffleIndex for &[T] {
-    fn shuffled_indices(&self, seed: usize) -> Vec<usize> {
-        let mut rng = XoShiRo256SS::new(seed as u64);
+    pub trait ShuffleIndex {
+        fn len(&self) -> usize;
 
-        let mut indices = (0..(self.len())).collect::<Vec<usize>>();
+        fn shuffled_indices_with_rng(&self, rng: &mut XoShiRo256SS) -> Vec<usize> {
+            let mut indices = (0..(self.len())).collect::<Vec<usize>>();
 
-        for i in (1..(self.len())).rev() {
-            let j = rng.rand_range(0, (i as u64) + 1);
-            indices.swap(
-                usize::try_from(j).expect("The index swap range will always be within a usize"),
-                i,
-            );
+            for i in (1..(self.len())).rev() {
+                let j = rng.rand_range(0, (i as u64) + 1);
+                indices.swap(
+                    usize::try_from(j).expect("The index swap range will always be within a usize"),
+                    i,
+                );
+            }
+
+            indices
         }
 
-        indices
+        fn shuffled_indices(&self, seed: u64) -> Vec<usize> {
+            let mut rng = XoShiRo256SS::new(seed);
+            self.shuffled_indices_with_rng(&mut rng)
+        }
+    }
+
+    impl<T> ShuffleIndex for &[T] {
+        fn len(&self) -> usize {
+            <[T]>::len(self)
+        }
+    }
+
+    impl<T> ShuffleIndex for Vec<T> {
+        fn len(&self) -> usize {
+            self.len()
+        }
+    }
+
+    impl<const N: usize, T> ShuffleIndex for [T; N] {
+        fn len(&self) -> usize {
+            self.as_slice().len()
+        }
+    }
+}
+
+pub mod weighted_choice {
+    use super::XoShiRo256SS;
+
+    pub trait WeightedChoice<T> {
+        fn weight_at(&self, index: usize) -> Option<u64>;
+
+        fn item_at(&self, index: usize) -> Option<&T>;
+
+        fn choose(&self, seed: u64) -> Option<&T> {
+            let mut rng = XoShiRo256SS::new(seed);
+            self.choose_with_rng(&mut rng)
+        }
+
+        fn choose_with_rng(&self, rng: &mut XoShiRo256SS) -> Option<&T> {
+            use std::collections::BTreeMap;
+
+            let mut btree = BTreeMap::<u64, Vec<&T>>::new();
+            let mut total_weight = 0;
+
+            for i in 0.. {
+                match (self.weight_at(i), self.item_at(i)) {
+                    (Some(weight), Some(item)) => {
+                        total_weight += weight;
+
+                        btree
+                            .entry(weight)
+                            .and_modify(|items| {
+                                items.push(item);
+                            })
+                            .or_insert_with(|| vec![item]);
+                    }
+                    (_, _) => break,
+                }
+            }
+
+            let mut pick = rng.rand_range(0, total_weight);
+
+            for (weight, items) in &btree {
+                for item in items {
+                    match pick.checked_sub(*weight) {
+                        Some(0) | None => return Some(*item),
+                        Some(next) => pick = next,
+                    }
+                }
+            }
+
+            btree.pop_last().and_then(|(_, mut items)| items.pop())
+        }
+    }
+
+    impl<T, U> WeightedChoice<T> for &[(T, U)]
+    where
+        U: Clone + Into<u64>,
+    {
+        fn weight_at(&self, index: usize) -> Option<u64> {
+            self.get(index).map(|(_, weight)| weight.clone().into())
+        }
+
+        fn item_at(&self, index: usize) -> Option<&T> {
+            self.get(index).map(|(item, _)| item)
+        }
+    }
+
+    impl<T, U> WeightedChoice<T> for Vec<(T, U)>
+    where
+        U: Clone + Into<u64>,
+    {
+        fn weight_at(&self, index: usize) -> Option<u64> {
+            self.get(index).map(|(_, weight)| weight.clone().into())
+        }
+
+        fn item_at(&self, index: usize) -> Option<&T> {
+            self.get(index).map(|(item, _)| item)
+        }
+    }
+
+    impl<const N: usize, T, U> WeightedChoice<T> for [(T, U); N]
+    where
+        U: Clone + Into<u64>,
+    {
+        fn weight_at(&self, index: usize) -> Option<u64> {
+            self.get(index).map(|(_, weight)| weight.clone().into())
+        }
+
+        fn item_at(&self, index: usize) -> Option<&T> {
+            self.get(index).map(|(item, _)| item)
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::generators;
-use crate::wandom::ShuffleIndex;
+use crate::wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex};
 use crate::zippy::Zip;
 
 use endless_sky_rw::{
@@ -72,6 +72,7 @@ pub fn process(
 
     let data = data_folder.data();
 
+    let mut rng = XoShiRo256SS::new(u64::try_from(settings.seed)?);
     let mut output = vec![];
 
     let mut generator = SystemShuffler {
@@ -115,6 +116,7 @@ pub fn process(
     for preset_index in 0..=(settings.max_presets) {
         generator.preset(
             data,
+            &mut rng,
             preset_index,
             system_names.as_slice(),
             &persistent_nodes,
@@ -510,6 +512,7 @@ impl SystemShuffler<'_> {
     fn preset(
         &mut self,
         data: &Data,
+        rng: &mut XoShiRo256SS,
         preset_index: u8,
         system_names: &[&str],
         persistent_nodes: &PersistentOriginalNodes<'_>,
@@ -522,7 +525,7 @@ impl SystemShuffler<'_> {
 
         let shuffle_event_source = self.output_data.insert_source(String::new());
 
-        let system_swaps = self.get_system_swaps(system_names, preset_index);
+        let system_swaps = Self::get_system_swaps(rng, system_names, preset_index);
 
         let preset_path = format!("data/presets/universe_preset_{preset_index}");
 
@@ -591,7 +594,7 @@ impl SystemShuffler<'_> {
     }
 
     fn get_system_swaps<'a>(
-        &self,
+        rng: &mut XoShiRo256SS,
         system_names: &[&'a str],
         preset_index: usize,
     ) -> HashMap<&'a str, &'a str> {
@@ -601,7 +604,7 @@ impl SystemShuffler<'_> {
                 .collect::<Vec<_>>()
         } else {
             system_names
-                .shuffled_indices(self.settings.seed.wrapping_add(preset_index))
+                .shuffled_indices_with_rng(rng)
                 .into_iter()
                 .map(|i| system_names[i])
                 .collect::<Vec<_>>()

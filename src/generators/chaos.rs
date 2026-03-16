@@ -1,5 +1,5 @@
 use crate::generators;
-use crate::wandom::ShuffleIndex;
+use crate::wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex};
 use crate::zippy::Zip;
 
 use endless_sky_rw::{
@@ -43,21 +43,21 @@ pub fn process(
 
     let data = data_folder.data();
 
+    let mut rng = XoShiRo256SS::new(u64::try_from(settings.seed)?);
     let mut output = vec![];
 
     let mut generator = Chaos {
         archive: Zip::new(&mut output),
         output_data: Data::default(),
-        settings,
     };
 
     generator.description()?;
 
     generator.archive.write_dir("data/")?;
 
-    generator.outfits(data)?;
+    generator.outfits(data, &mut rng)?;
 
-    generator.ships(data)?;
+    generator.ships(data, &mut rng)?;
 
     generator.archive.finish()?;
 
@@ -67,7 +67,6 @@ pub fn process(
 struct Chaos<'a> {
     archive: Zip<'a>,
     output_data: Data,
-    settings: ChaosConfig,
 }
 
 struct OutfitData<'a> {
@@ -181,7 +180,7 @@ impl Chaos<'_> {
         self.zip_root_nodes("plugin.txt", output_root_node_count)
     }
 
-    fn outfits(&mut self, data: &Data) -> Result<(), Box<dyn Error>> {
+    fn outfits(&mut self, data: &Data, rng: &mut XoShiRo256SS) -> Result<(), Box<dyn Error>> {
         let output_root_node_count = self.output_data.root_nodes().len();
 
         let outfit_output_source = self.output_data.insert_source(String::new());
@@ -196,8 +195,7 @@ impl Chaos<'_> {
             .iter()
             .zip(
                 outfit_keys
-                    .as_slice()
-                    .shuffled_indices(self.settings.seed)
+                    .shuffled_indices_with_rng(rng)
                     .into_iter()
                     .filter_map(|i| outfit_keys.get(i)),
             )
@@ -232,7 +230,7 @@ impl Chaos<'_> {
         self.zip_root_nodes("data/outfits.txt", output_root_node_count)
     }
 
-    fn ships(&mut self, data: &Data) -> Result<(), Box<dyn Error>> {
+    fn ships(&mut self, data: &Data, rng: &mut XoShiRo256SS) -> Result<(), Box<dyn Error>> {
         let output_root_node_count = self.output_data.root_nodes().len();
 
         let ship_output_source = self.output_data.insert_source(String::new());
@@ -249,8 +247,7 @@ impl Chaos<'_> {
             .iter()
             .zip(
                 ship_keys
-                    .as_slice()
-                    .shuffled_indices(self.settings.seed)
+                    .shuffled_indices_with_rng(rng)
                     .into_iter()
                     .filter_map(|i| ship_keys.get(i)),
             )
