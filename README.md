@@ -18,7 +18,7 @@ I use them because I am casual and unconcerned.
 
 If you have cargo and rustup:
 1. `rustup target add wasm32-unknown-unknown`
-2. `cargo install --version =0.2.108 wasm-bindgen-cli`
+2. `cargo install --version =0.2.114 wasm-bindgen-cli`
 3. `cargo build --target wasm32-unknown-unknown --release`
 4. `wasm-bindgen --target web "target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm" --no-typescript --out-dir "./www"`
 5. `rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"`
