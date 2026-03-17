@@ -169,25 +169,28 @@ impl XoShiRo256SS {
     }
 
     pub fn rand_range(&mut self, minimum: u64, maximum: u64) -> u64 {
-        if maximum.checked_add(minimum).is_none() {
-            return self.step();
-        }
-
-        maximum.checked_sub(minimum).map_or(minimum, |num_range| {
-            let bits = num_range.checked_ilog2().unwrap_or_default() + 1;
-
-            if bits < 64 {
-                let mut num = self.step() % 1u64.wrapping_shl(bits);
-
-                while num >= num_range {
-                    num = self.step() % 1u64.wrapping_shl(bits);
+        maximum
+            .max(minimum)
+            .checked_sub(minimum.min(maximum))
+            .map_or(0, |num_range| {
+                if num_range == 0 {
+                    return num_range;
                 }
 
-                num + minimum
-            } else {
-                self.step()
-            }
-        })
+                let bits = num_range.checked_ilog2().unwrap_or_default() + 1;
+
+                if bits < 64 {
+                    let mut num = self.step() % 1u64.wrapping_shl(bits);
+
+                    while num >= num_range {
+                        num = self.step() % 1u64.wrapping_shl(bits);
+                    }
+
+                    num + minimum
+                } else {
+                    self.step()
+                }
+            })
     }
 }
 
