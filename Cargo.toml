@@ -10,7 +10,7 @@ all         = { level  = "deny", priority = -1 }
 unwrap_used = "deny"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [profile.release]
 lto = true
@@ -20,3 +20,12 @@ wasm-bindgen = "=0.2.114"
 rawzip = "=0.4.4"
 flate2 = "=1.1.9"
 endless_sky_rw = { path = "./endless_sky_rw" }
+
+[[bin]]
+name = "full_map"
+
+[[bin]]
+name = "system_shuffler"
+
+[[bin]]
+name = "chaos"
