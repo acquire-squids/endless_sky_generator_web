@@ -3,7 +3,8 @@ use crate::wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex};
 use crate::zippy::Zip;
 
 use endless_sky_rw::{
-    Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter, tree_from_tokens,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
+    tree_from_tokens,
 };
 
 use std::{
@@ -12,8 +13,6 @@ use std::{
     error::Error,
     path::PathBuf,
 };
-
-use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "System Shuffler";
 
@@ -26,22 +25,19 @@ const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle Day";
 const RESTORE_PREFIX: &str = "System Shuffler: Restore Preset";
 const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
 pub struct SystemShufflerConfig {
-    seed: usize,
+    seed: u32,
     max_presets: u8,
     shuffle_chance: u8,
     fixed_shuffle_days: u8,
     shuffle_once_on_install: bool,
 }
 
-#[wasm_bindgen]
 impl SystemShufflerConfig {
-    #[wasm_bindgen(constructor)]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn new(
-        seed: usize,
+    #[must_use]
+    pub const fn new(
+        seed: u32,
         max_presets: u8,
         shuffle_chance: u8,
         fixed_shuffle_days: u8,
@@ -63,16 +59,14 @@ struct SystemShuffler<'a> {
     settings: SystemShufflerConfig,
 }
 
-pub fn process(
-    paths: Vec<String>,
-    sources: Vec<String>,
+#[allow(clippy::missing_errors_doc)]
+pub fn process_data(
+    data_folder: &DataFolder,
     settings: SystemShufflerConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data_folder = generators::read_upload(paths, sources)?;
-
     let data = data_folder.data();
 
-    let mut rng = XoShiRo256SS::new(u64::try_from(settings.seed)?);
+    let mut rng = XoShiRo256SS::new(u64::from(settings.seed));
     let mut output = vec![];
 
     let mut generator = SystemShuffler {

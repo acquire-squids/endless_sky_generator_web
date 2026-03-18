@@ -3,12 +3,11 @@ use crate::wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex};
 use crate::zippy::Zip;
 
 use endless_sky_rw::{
-    Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter, tree_from_tokens,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
+    tree_from_tokens,
 };
 
 use std::{collections::HashMap, error::Error, path::PathBuf};
-
-use wasm_bindgen::prelude::*;
 
 const PLUGIN_NAME: &str = "Chaos";
 
@@ -19,31 +18,28 @@ const PLUGIN_DESCRIPTION: &str = "\
 
 const PLUGIN_VERSION: &str = "0.1.0";
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
 pub struct ChaosConfig {
-    seed: usize,
+    seed: u64,
 }
 
-#[wasm_bindgen]
 impl ChaosConfig {
-    #[wasm_bindgen(constructor)]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn new(seed: usize) -> Self {
-        Self { seed }
+    #[must_use]
+    pub fn new(seed: u32) -> Self {
+        Self {
+            seed: u64::from(seed),
+        }
     }
 }
 
-pub fn process(
-    paths: Vec<String>,
-    sources: Vec<String>,
+#[allow(clippy::missing_errors_doc)]
+pub fn process_data(
+    data_folder: &DataFolder,
     settings: ChaosConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data_folder = generators::read_upload(paths, sources)?;
-
     let data = data_folder.data();
 
-    let mut rng = XoShiRo256SS::new(u64::try_from(settings.seed)?);
+    let mut rng = XoShiRo256SS::new(settings.seed);
     let mut output = vec![];
 
     let mut generator = Chaos {

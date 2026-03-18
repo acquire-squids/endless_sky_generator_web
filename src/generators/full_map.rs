@@ -2,7 +2,8 @@ use crate::generators;
 use crate::zippy::Zip;
 
 use endless_sky_rw::{
-    Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter, tree_from_tokens,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
+    tree_from_tokens,
 };
 
 use std::{error::Error, path::PathBuf};
@@ -33,9 +34,8 @@ fn find_named_objects<'a>(
     }
 }
 
-pub fn process(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data_folder = generators::read_upload(paths, sources)?;
-
+#[allow(clippy::missing_errors_doc)]
+pub fn process_data(data_folder: &DataFolder) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = data_folder.data();
 
     let mut output = vec![];
