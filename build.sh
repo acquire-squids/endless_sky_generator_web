@@ -8,24 +8,10 @@ rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
 ./list_stable_data_paths
 
 cargo clippy \
-  --target "host-tuple" \
-  --release \
-  --bins
+  --release
 
 cargo build \
-  --target "host-tuple" \
-  --release \
-  --bins
-
-cargo clippy \
-  --target wasm32-unknown-unknown \
-  --release \
-  --lib
-
-cargo build \
-  --target wasm32-unknown-unknown \
-  --release \
-  --lib
+  --release
 
 wasm-bindgen \
   --target web "target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm" \

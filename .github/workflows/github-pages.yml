@@ -42,26 +42,12 @@ jobs:
       - name: Cargo clippy
         id: cargo_clippy
         run: |
-          cargo clippy \
-            --target x86_64-unknown-linux-gnu \
-            --release \
-            --bins
-          cargo clippy \
-            --target wasm32-unknown-unknown \
-            --release \
-            --lib
+          cargo clippy --release
       
       - name: Build
         id: build
         run: |
-          cargo build \
-            --target x86_64-unknown-linux-gnu \
-            --release \
-            --bins
-          cargo build \
-            --target wasm32-unknown-unknown \
-            --release \
-            --lib
+          cargo build --release
       
       - name: Run wasm-bindgen
         id: bind
