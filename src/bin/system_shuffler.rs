@@ -1,6 +1,6 @@
 use endless_sky_generator_web::{
     config::{self, Value},
-    generators::system_shuffler::{self, SystemShufflerConfig},
+    generators::system_shuffler::{self, config::SystemShufflerConfig},
 };
 
 const FILE_NAME: &str = "system_shuffler.zip";
@@ -27,7 +27,7 @@ fn main() -> ExitCode {
                 Ok(source) => {
                     let Some(settings) = config::parse_config!(
                         source.as_str() => SystemShufflerConfig;
-                        seed => { int of u32 => seed }
+                        seed => { int of u64 => seed }
                         max_presets => { int of u8 => max_presets }
                         shuffle_chance => { int of u8 where shuffle_chance <= 100 => shuffle_chance }
                         fixed_shuffle_days => { int of u8 => fixed_shuffle_days }

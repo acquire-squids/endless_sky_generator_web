@@ -25,48 +25,32 @@ const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle Day";
 const RESTORE_PREFIX: &str = "System Shuffler: Restore Preset";
 const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
 
-#[derive(Debug, Clone, Copy)]
-pub struct SystemShufflerConfig {
-    seed: u32,
-    max_presets: u8,
-    shuffle_chance: u8,
-    fixed_shuffle_days: u8,
-    shuffle_once_on_install: bool,
-}
-
-impl SystemShufflerConfig {
-    #[must_use]
-    pub const fn new(
-        seed: u32,
-        max_presets: u8,
-        shuffle_chance: u8,
-        fixed_shuffle_days: u8,
-        shuffle_once_on_install: bool,
-    ) -> Self {
-        Self {
-            seed,
-            max_presets,
-            shuffle_chance,
-            fixed_shuffle_days,
-            shuffle_once_on_install,
-        }
+pub mod config {
+    crate::macros::wasm_newtype! {
+        in main =>
+        pub SystemShufflerConfig ;
+        pub seed: u64,
+        pub max_presets: u8,
+        pub shuffle_chance: u8,
+        pub fixed_shuffle_days: u8,
+        pub shuffle_once_on_install: bool,
     }
 }
 
 struct SystemShuffler<'a> {
     archive: Zip<'a>,
     output_data: Data,
-    settings: SystemShufflerConfig,
+    settings: config::SystemShufflerConfig,
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn process_data(
     data_folder: &DataFolder,
-    settings: SystemShufflerConfig,
+    settings: config::SystemShufflerConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = data_folder.data();
 
-    let mut rng = XoShiRo256SS::new(u64::from(settings.seed));
+    let mut rng = XoShiRo256SS::new(settings.seed);
     let mut output = vec![];
 
     let mut generator = SystemShuffler {
@@ -107,7 +91,7 @@ pub fn process_data(
 
     generator.archive.write_dir("data/presets/")?;
 
-    for preset_index in 0..=(settings.max_presets) {
+    for preset_index in 0..=(generator.settings.max_presets) {
         generator.preset(
             data,
             &mut rng,

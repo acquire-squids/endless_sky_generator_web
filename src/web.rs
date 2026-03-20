@@ -19,7 +19,7 @@ pub fn generate_full_map(paths: Vec<String>, sources: Vec<String>) -> Result<Vec
 pub fn generate_system_shuffler(
     paths: Vec<String>,
     sources: Vec<String>,
-    settings: self::system_shuffler::SystemShufflerConfig,
+    settings: self::system_shuffler::config::SystemShufflerConfig,
 ) -> Result<Vec<u8>, String> {
     self::system_shuffler::process_data(paths, sources, settings).map_err(|e| e.to_string())
 }
@@ -29,7 +29,7 @@ pub fn generate_system_shuffler(
 pub fn generate_chaos(
     paths: Vec<String>,
     sources: Vec<String>,
-    settings: self::chaos::ChaosConfig,
+    settings: self::chaos::config::ChaosConfig,
 ) -> Result<Vec<u8>, String> {
     self::chaos::process_data(paths, sources, settings).map_err(|e| e.to_string())
 }

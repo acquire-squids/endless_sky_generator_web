@@ -1,5 +1,6 @@
 pub mod config;
 pub mod generators;
+mod macros;
 mod wandom;
 mod zippy;
 

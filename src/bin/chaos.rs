@@ -1,6 +1,6 @@
 use endless_sky_generator_web::{
     config::{self, Value},
-    generators::chaos::{self, ChaosConfig},
+    generators::chaos::{self, config::ChaosConfig},
 };
 
 const FILE_NAME: &str = "chaos.zip";
@@ -27,14 +27,14 @@ fn main() -> ExitCode {
                 Ok(source) => {
                     let Some(settings) = config::parse_config!(
                         source.as_str() => ChaosConfig;
-                        seed => { int of u32 => seed }
+                        seed => { int of u64 => seed }
                     ) else {
                         return ExitCode::FAILURE;
                     };
 
                     endless_sky_rw::read_path("./www/es_stable_data/").map_or(
                         ExitCode::FAILURE,
-                        |data_folder| match chaos::process_data(&data_folder, settings) {
+                        |data_folder| match chaos::process_data(&data_folder, &settings) {
                             Ok(bytes) => {
                                 match fs::create_dir_all(OUTPUT_FOLDER).and_then(|()| {
                                     fs::write(format!("{OUTPUT_FOLDER}/{FILE_NAME}"), bytes)

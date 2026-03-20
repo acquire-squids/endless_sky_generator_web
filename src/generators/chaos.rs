@@ -18,24 +18,18 @@ const PLUGIN_DESCRIPTION: &str = "\
 
 const PLUGIN_VERSION: &str = "0.1.0";
 
-#[derive(Debug, Clone, Copy)]
-pub struct ChaosConfig {
-    seed: u64,
-}
-
-impl ChaosConfig {
-    #[must_use]
-    pub fn new(seed: u32) -> Self {
-        Self {
-            seed: u64::from(seed),
-        }
+pub mod config {
+    crate::macros::wasm_newtype! {
+        in main =>
+        pub ChaosConfig;
+        pub seed: u64,
     }
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn process_data(
     data_folder: &DataFolder,
-    settings: ChaosConfig,
+    settings: &config::ChaosConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = data_folder.data();
 
