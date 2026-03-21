@@ -25,7 +25,6 @@ If you have cargo and rustup:
 2. `cargo install --version =0.2.114 wasm-bindgen-cli`
 3. `cargo build --target wasm32-unknown-unknown --release --lib`
 4. `wasm-bindgen --target web "target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm" --no-typescript --out-dir "./www"`
-5. `rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"`
 
 ### Native
 1. `cargo build --target host-tuple --release --bins`
@@ -39,11 +38,12 @@ This can be done with the following commands:
 3. `git sparse-checkout set --no-cone /data`
 4. `git checkout`
 5. `cp -r data/ ../www/es_stable_data/`
-6. `../list_stable_data_paths`
+6. `rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"`
+7. `../list_stable_data_paths`
 
 Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
 
-Steps 1 through 5 can be achieved by running `./get_stable_es_data.sh`.
+Steps 1 through 7 can be achieved by running `./get_stable_es_data.sh`.
 
 ## Notes
 I'll probably add a few more generators.  The initial goal was just System Shuffler.

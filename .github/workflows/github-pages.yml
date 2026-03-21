@@ -47,7 +47,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          cargo build --release
+          cargo build --target wasm32-unknown-unknown --release --lib
       
       - name: Run wasm-bindgen
         id: bind

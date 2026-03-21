@@ -1,7 +1,9 @@
 use std::{fs, path::PathBuf, process::ExitCode};
 
+const DATA_PATH: &str = "../www/es_stable_data/";
+
 fn main() -> ExitCode {
-    let input_path = PathBuf::from("endless-sky/data/");
+    let input_path = PathBuf::from(DATA_PATH);
     let mut paths_list = vec![];
 
     match read_source(input_path, &mut paths_list) {
@@ -15,21 +17,16 @@ fn main() -> ExitCode {
                     !path
                         .display()
                         .to_string()
-                        .starts_with("endless-sky/data/_deprecated")
+                        .starts_with(format!("{DATA_PATH}deprecated").as_str())
                 })
                 .fold(String::new(), |mut accum, path| {
                     // I know, we have perfectly fine `PathBuf`s, we shouldn't be using strings like this
-                    accum.push_str(
-                        path.display()
-                            .to_string()
-                            .replacen("endless-sky/data/", "es_stable_data/", 1)
-                            .as_str(),
-                    );
+                    accum.push_str(path.display().to_string().replacen("www/", "", 1).as_str());
                     accum.push('\n');
                     accum
                 });
 
-            match fs::write("www/es_stable_data_paths.txt", list_as_text) {
+            match fs::write("../www/es_stable_data_paths.txt", list_as_text) {
                 Ok(_) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("{error}");
