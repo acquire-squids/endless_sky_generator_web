@@ -1215,12 +1215,21 @@ impl SystemShuffler<'_> {
                 .and_then(|token| self.output_data.get_lexeme(source, *token))
                 .expect("Only nodes with at least one token should be modified"),
         ) {
-            (a, b) if a == b => Ordering::Equal,
-            ("pos" | "government", _) => Ordering::Less,
-            (_, "pos" | "government") => Ordering::Greater,
+            (a_lexeme, b_lexeme) if a_lexeme == b_lexeme => self
+                .output_data
+                .get_tokens(*a)
+                .and_then(|tokens| tokens.get(1))
+                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .cmp(
+                    &self
+                        .output_data
+                        .get_tokens(*b)
+                        .and_then(|tokens| tokens.get(1))
+                        .and_then(|token| self.output_data.get_lexeme(source, *token)),
+                ),
             (_, "add" | "link") | ("remove" | "unlink", _) => Ordering::Less,
             ("add" | "link", _) | (_, "remove" | "unlink") => Ordering::Greater,
-            (_, _) => Ordering::Equal,
+            (a, b) => a.cmp(b),
         }
     }
 
