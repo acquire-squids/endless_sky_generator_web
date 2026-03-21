@@ -1,14 +1,18 @@
-use endless_sky_generator_web::{
-    config::{self, Value},
-    generators::chaos::{self, config::ChaosConfig},
-};
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+const fn main() {}
 
-const FILE_NAME: &str = "chaos.zip";
-const OUTPUT_FOLDER: &str = "output";
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+fn main() -> std::process::ExitCode {
+    use endless_sky_generator_web::{
+        config::{self, Value},
+        generators::chaos::{self, config::ChaosConfig},
+    };
 
-use std::{env, fs, path::PathBuf, process::ExitCode};
+    const FILE_NAME: &str = "chaos.zip";
+    const OUTPUT_FOLDER: &str = "output";
 
-fn main() -> ExitCode {
+    use std::{env, fs, path::PathBuf, process::ExitCode};
+
     let mut arguments = env::args();
     arguments.next();
 

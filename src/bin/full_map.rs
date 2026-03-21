@@ -1,11 +1,15 @@
-use endless_sky_generator_web::generators::full_map;
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+const fn main() {}
 
-const FILE_NAME: &str = "full_map.zip";
-const OUTPUT_FOLDER: &str = "output";
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+fn main() -> std::process::ExitCode {
+    use endless_sky_generator_web::generators::full_map;
 
-use std::{fs, process::ExitCode};
+    const FILE_NAME: &str = "full_map.zip";
+    const OUTPUT_FOLDER: &str = "output";
 
-fn main() -> ExitCode {
+    use std::{fs, process::ExitCode};
+
     endless_sky_rw::read_path("./www/es_stable_data/").map_or(ExitCode::FAILURE, |data_folder| {
         match full_map::process_data(&data_folder) {
             Ok(bytes) => {
