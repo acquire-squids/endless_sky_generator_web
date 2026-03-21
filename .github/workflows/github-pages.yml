@@ -77,16 +77,14 @@ jobs:
           path: ./list_stable_data_paths
           key: ${{ runner.os }}-list_script_cache-${{ hashFiles('list_stable_data_paths.rs') }}
 
-      - name: Compile list script
-        id: list_script_compile
-        if: steps.list_script_cache.outputs.cache-hit != 'true'
-        run: |
-          rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"
-
       - name: List stable data paths
         id: list_stable_data_paths
+        if: steps.data_cache.outputs.cache-hit == 'true'
         run: |
-          ./list_stable_data_paths
+          cd endless-sky/
+          rustc -o "../list_stable_data_paths" "../list_stable_data_paths.rs"
+          ../list_stable_data_paths
+          cd ..
 
       - name: Remove `.gitignore` so the wasm is deployed
         id: bandaid
