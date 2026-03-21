@@ -28,7 +28,7 @@ If you have cargo and rustup:
 5. `rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"`
 
 ### Native
-1. `cargo build --release --bins`
+1. `cargo build --target host-tuple --release --bins`
 
 ### Default Data
 You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
