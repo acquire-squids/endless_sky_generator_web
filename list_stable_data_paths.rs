@@ -21,7 +21,12 @@ fn main() -> ExitCode {
                 })
                 .fold(String::new(), |mut accum, path| {
                     // I know, we have perfectly fine `PathBuf`s, we shouldn't be using strings like this
-                    accum.push_str(path.display().to_string().replacen("www/", "", 1).as_str());
+                    accum.push_str(
+                        path.display()
+                            .to_string()
+                            .replacen("../www/", "", 1)
+                            .as_str(),
+                    );
                     accum.push('\n');
                     accum
                 });
