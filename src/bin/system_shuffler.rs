@@ -40,12 +40,17 @@ fn main() -> std::process::ExitCode {
                         return ExitCode::FAILURE;
                     };
 
-                    endless_sky_rw::read_path("./www/es_stable_data/").map_or(
-                        ExitCode::FAILURE,
-                        |data_folder| match system_shuffler::process_data(&data_folder, settings) {
+                    let data_path = ["www", "es_stable_data"].iter().collect::<PathBuf>();
+                    let data_path = data_path.as_path();
+
+                    endless_sky_rw::read_path_and_ignore_if(data_path, |p| {
+                        p.starts_with(data_path.join("_deprecated"))
+                    })
+                    .map_or(ExitCode::FAILURE, |data_folder| {
+                        match system_shuffler::process_data(&data_folder, settings) {
                             Ok(bytes) => {
                                 match fs::create_dir_all(OUTPUT_FOLDER).and_then(|()| {
-                                    fs::write(format!("{OUTPUT_FOLDER}/{FILE_NAME}"), bytes)
+                                    fs::write(PathBuf::from(OUTPUT_FOLDER).join(FILE_NAME), bytes)
                                 }) {
                                     Ok(()) => ExitCode::SUCCESS,
                                     Err(error) => {
@@ -58,8 +63,8 @@ fn main() -> std::process::ExitCode {
                                 eprintln!("{error}");
                                 ExitCode::FAILURE
                             }
-                        },
-                    )
+                        }
+                    })
                 }
                 Err(error) => {
                     eprintln!("{error}");

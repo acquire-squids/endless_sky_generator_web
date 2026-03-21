@@ -1,37 +1,45 @@
-use std::{fs, path::PathBuf, process::ExitCode};
-
-const DATA_PATH: &str = "../www/es_stable_data/";
+use std::{
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 fn main() -> ExitCode {
-    let input_path = PathBuf::from(DATA_PATH);
+    let data_path = ["..", "www", "es_stable_data"].iter().collect::<PathBuf>();
+
+    let deprecated_path = PathBuf::from(data_path.as_path().join("_deprecated"));
+    let deprecated_path = deprecated_path.as_path();
+
+    let output = ["..", "www", "es_stable_data_paths.txt"]
+        .iter()
+        .collect::<PathBuf>();
+
     let mut paths_list = vec![];
 
-    match read_source(input_path, &mut paths_list) {
+    match read_source(data_path, &mut paths_list, &mut |p| {
+        // I don't want deprecated data included in the generator's defaults
+        p.starts_with(deprecated_path)
+    }) {
         ReadResult::Ok => {
             paths_list.sort_unstable();
 
             let list_as_text = paths_list
                 .into_iter()
-                .filter(|path| {
-                    // I don't want deprecated data included in the generator's defaults
-                    !path
-                        .display()
-                        .to_string()
-                        .starts_with(format!("{DATA_PATH}deprecated").as_str())
-                })
-                .fold(String::new(), |mut accum, path| {
-                    // I know, we have perfectly fine `PathBuf`s, we shouldn't be using strings like this
-                    accum.push_str(
-                        path.display()
-                            .to_string()
-                            .replacen("../www/", "", 1)
-                            .as_str(),
+                .fold(OsString::new(), |mut accum, path| {
+                    accum.push(
+                        path.components()
+                            .skip(2)
+                            .collect::<PathBuf>()
+                            .as_mut_os_string(),
                     );
-                    accum.push('\n');
+
+                    accum.push("\n");
+
                     accum
                 });
 
-            match fs::write("../www/es_stable_data_paths.txt", list_as_text) {
+            match fs::write(output, list_as_text.into_encoded_bytes()) {
                 Ok(_) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("{error}");
@@ -50,42 +58,50 @@ enum ReadResult {
     Err,
 }
 
-fn read_source(file_path: PathBuf, paths: &mut Vec<PathBuf>) -> ReadResult {
-    if !file_path.exists() {
-        eprintln!("File \"{}\" does not exist", file_path.display());
-        ReadResult::Err
-    } else if file_path.is_dir() {
-        let mut all_success = true;
+fn read_source<F>(file_path: PathBuf, paths: &mut Vec<PathBuf>, ignore_if: &mut F) -> ReadResult
+where
+    F: FnMut(&Path) -> bool,
+{
+    if file_path.exists() {
+        if ignore_if(file_path.as_path()) {
+            ReadResult::Ok
+        } else if file_path.is_dir() {
+            let mut all_success = true;
 
-        if let Ok(dir) = fs::read_dir(&file_path) {
-            for entry in dir.flatten() {
-                let file_path = entry.path();
+            if let Ok(dir) = fs::read_dir(&file_path) {
+                for entry in dir.flatten() {
+                    let file_path = entry.path();
 
-                all_success &= matches!(read_source(file_path, paths), ReadResult::Ok);
-            }
+                    all_success &=
+                        matches!(read_source(file_path, paths, ignore_if), ReadResult::Ok);
+                }
 
-            if all_success {
-                ReadResult::Ok
+                if all_success {
+                    ReadResult::Ok
+                } else {
+                    ReadResult::Err
+                }
             } else {
+                eprintln!("Failed to read directory \"{}\"", file_path.display());
                 ReadResult::Err
             }
+        } else if file_path.is_file() {
+            if matches!(file_path.extension(), Some(ext) if matches!(ext.to_str(), Some(ext) if ext == EXTENSION))
+            {
+                paths.push(file_path);
+            }
+
+            ReadResult::Ok
         } else {
-            eprintln!("Failed to read directory \"{}\"", file_path.display());
+            eprintln!(
+                "Path \"{}\" was not a file or a directory",
+                file_path.display()
+            );
+
             ReadResult::Err
         }
-    } else if file_path.is_file() {
-        if matches!(file_path.extension(), Some(ext) if matches!(ext.to_str(), Some(ext) if ext == EXTENSION))
-        {
-            paths.push(file_path);
-        }
-
-        ReadResult::Ok
     } else {
-        eprintln!(
-            "Path \"{}\" was not a file or a directory",
-            file_path.display()
-        );
-
+        eprintln!("File \"{}\" does not exist", file_path.display());
         ReadResult::Err
     }
 }
