@@ -1,0 +1,5 @@
+seed                    = 0
+max_presets             = 1
+shuffle_chance          = 0
+fixed_shuffle_days      = 0
+shuffle_once_on_install = true

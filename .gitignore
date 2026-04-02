@@ -6,5 +6,10 @@
 /endless-sky
 /www/es_stable_data
 /www/es_stable_data_paths.txt
-/config
 /output
+
+# Allow configurations for the binaries
+/config/**
+!/config/
+!/config/**/
+!/config/**/*.txt
