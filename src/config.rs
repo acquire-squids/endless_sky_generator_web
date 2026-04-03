@@ -358,7 +358,7 @@ pub fn tokenize(source: &str) -> Vec<Token<'_>> {
             }
             _ => {
                 while let Some(n) = source.char_at(byte_offset) {
-                    if n.is_whitespace() {
+                    if n.is_whitespace() || matches!(n, '(' | ')' | '=' | '"' | '`') {
                         break;
                     }
 
