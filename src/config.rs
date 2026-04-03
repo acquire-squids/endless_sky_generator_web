@@ -133,7 +133,6 @@ pub use __config_option as config_option;
 
 pub use __parse_config as parse_config;
 
-#[allow(clippy::missing_errors_doc)]
 #[must_use]
 pub fn parse(source: &str) -> Option<Config<'_>> {
     let mut config = Config {
@@ -163,13 +162,11 @@ pub fn parse(source: &str) -> Option<Config<'_>> {
             } else {
                 eprintln!("Invalid config!");
 
-                eprintln!(
-                    "Expected a string, followed by an equal sign, followed by either a decimal integer or a string or a list"
-                );
+                let values = "any of: a decimal integer, a string, a list, a 64-bit float, \"true\", \"false\"";
 
-                eprintln!(
-                    "Lists look \"(like this)\" and can contain decimal integers, strings, or other lists"
-                );
+                eprintln!("Expected a string, followed by an equal sign, followed by {values}");
+
+                eprintln!("Lists look \"(like this)\" and can contain {values}");
 
                 return None;
             }
@@ -177,6 +174,27 @@ pub fn parse(source: &str) -> Option<Config<'_>> {
     }
 
     Some(config)
+}
+
+#[must_use]
+pub fn key_value_list<'a, 'b>(list: &'b Value<'a>) -> Option<HashMap<&'a str, &'b Value<'a>>> {
+    if let Value::List(values) = list {
+        let mut table = HashMap::new();
+
+        for value in values {
+            if let Value::List(pair) = value
+                && pair.len() == 2
+                && let Some(Value::String(key)) = pair.first()
+                && let Some(value) = pair.get(1)
+            {
+                table.insert(*key, value);
+            }
+        }
+
+        Some(table)
+    } else {
+        None
+    }
 }
 
 fn value<'a>(tokens: &[Token<'a>], at: &mut usize) -> Option<Value<'a>> {
@@ -245,6 +263,24 @@ pub enum Value<'a> {
     String(&'a str),
     Boolean(bool),
     List(Vec<Self>),
+}
+
+impl From<bool> for Value<'_> {
+    fn from(value: bool) -> Self {
+        Self::Boolean(value)
+    }
+}
+
+impl From<&[Self]> for Value<'_> {
+    fn from(value: &[Self]) -> Self {
+        Self::List(value.to_vec())
+    }
+}
+
+impl From<Vec<Self>> for Value<'_> {
+    fn from(value: Vec<Self>) -> Self {
+        Self::List(value)
+    }
 }
 
 #[must_use]
