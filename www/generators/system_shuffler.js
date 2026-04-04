@@ -10,7 +10,7 @@ import {
 } from "../endless_sky_generator_web.js";
 
 export const preparation = () => {
-  const output = document.getElementById("system-shuffler-output");
+  const form = document.getElementById("system-shuffler-form");
 
   const seed = document.getElementById("system-shuffler-seed");
   const max_presets = document.getElementById("system-shuffler-max-presets");
@@ -36,30 +36,11 @@ export const preparation = () => {
   share_value(fixed_shuffle_days, fixed_shuffle_days_output);
   share_value(fixed_shuffle_days_output, fixed_shuffle_days);
 
-  output.addEventListener("click", async () => {
-    let errored = false;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-    if (!seed.checkValidity()) {
-      console.error("ERROR: System Shuffler seed is not a valid value");
-      errored = true;
-    }
-
-    if (!max_presets.checkValidity()) {
-      console.error("ERROR: System Shuffler max presets is not a valid value");
-      errored = true;
-    }
-
-    if (!shuffle_chance_output.checkValidity()) {
-      console.error("ERROR: System Shuffler chance is not a valid value");
-      errored = true;
-    }
-
-    if (!fixed_shuffle_days_output.checkValidity()) {
-      console.error("ERROR: System Shuffler fixed shuffle days is not a valid value");
-      errored = true;
-    }
-
-    if (errored) {
+    if (!form.checkValidity()) {
+      form.reportValidity();
       return;
     }
 

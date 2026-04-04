@@ -10,19 +10,15 @@ import {
 } from "../endless_sky_generator_web.js";
 
 export const preparation = () => {
-  const output = document.getElementById("chaos-output");
+  const form = document.getElementById("chaos-form");
 
   const seed = document.getElementById("chaos-seed");
 
-  output.addEventListener("click", async () => {
-    let errored = false;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-    if (!seed.checkValidity()) {
-      console.error("ERROR: Chaos seed is not a valid value");
-      errored = true;
-    }
-
-    if (errored) {
+    if (!form.checkValidity()) {
+      form.reportValidity();
       return;
     }
 

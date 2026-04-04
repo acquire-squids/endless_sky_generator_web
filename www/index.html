@@ -30,22 +30,15 @@
         </p>
       </div>
       <div>
-        <label>Include data from stable release:</label>
+        <label for="include-defaults">Include data from stable release:</label>
+        <input name="include-defaults" id="include-defaults" type="checkbox" checked></input>
       </div>
       <div>
-        <input id="include-defaults" type="checkbox" checked></input>
+        <label for="input">Upload your own data folder:</label>
+        <input name="input" id="input" type="file" webkitdirectory></input>
       </div>
       <div>
-        <label>Upload your own data folder:</label>
-      </div>
-      <div>
-        <input id="input" type="file" webkitdirectory></input>
-      </div>
-      <div>
-        <label>Clear your uploaded data folders:</label>
-      </div>
-      <div>
-        <input id="clear-uploads" type="button" value="Clear uploaded files"></input>
+        <button id="clear-uploads">Clear uploaded data</button>
       </div>
       <div>
         <h3>Table of contents:</h3>
@@ -74,9 +67,9 @@
         This works by reading all `system` root nodes.  A system created by an event and defined nowhere else won't be included.<br/>
         If a system is hidden or shrouded, it may not remain revealed after takeoff, if it is even revealed at all.
       </p>
-      <input id="full-map-output" type="button" value="Download"></input>
+      <button id="full-map-output" type="submit">Generate and download</button>
     </div>
-    <div>
+    <form name="system-shuffler-form" id="system-shuffler-form">
       <h2>
         <a id="System_Shuffler">System Shuffler</a>
       </h2>
@@ -94,41 +87,34 @@
         If you play on a version <b>before v0.11.0's unstable release</b>, event definitions are fully copied into your save file and <b>your save file has potential to explode in size!</b><br/><br/>
         Don't forget to <b>back up your saves before use!</b>
       </p>
-      <div>
-        <label>seed:</label>
-      </div>
-      <div>
-        <input id="system-shuffler-seed" type="number" value=0></input>
-      </div>
-      <div>
-        <label>max presets:</label>
-      </div>
-      <div>
-        <input id="system-shuffler-max-presets" type="number" value=1 min=1 max=255></input>
-      </div>
-      <div>
-        <label>shuffle once upon installation:</label>
-      </div>
-      <div>
-        <input id="system-shuffler-shuffle-once-on-install" type="checkbox" checked></input>
-      </div>
-      <div>
-        <label>chance to shuffle every time you land:</label>
-      </div>
-      <div>
-        <input id="system-shuffler-shuffle-chance" type="range" value=0 min=0 max=100></input>
-        <input id="system-shuffler-shuffle-chance-output" type="number" value=0 min=0 max=100></input>
-      </div>
-      <div>
-        <label>shuffle every N days (0 to disable):</label>
-      </div>
-      <div>
-        <input id="system-shuffler-fixed-shuffle-days" type="range" value=0 min=0 max=255></input>
-        <input id="system-shuffler-fixed-shuffle-days-output" type="number" value=0 min=0 max=255></input>
-      </div>
-      <input id="system-shuffler-output" type="button" value="Download"></input>
-    </div>
-    <div>
+      <fieldset>
+        <legend>System Shuffler Settings:</legend>
+        <div>
+          <label for="system-shuffler-seed">seed:</label>
+          <input name="system-shuffler-seed" id="system-shuffler-seed" type="number" required value=0></input>
+        </div>
+        <div>
+          <label for="system-shuffler-max-presets">max presets:</label>
+          <input name="system-shuffler-max-presets" id="system-shuffler-max-presets" type="number" required min=1 max=255></input>
+        </div>
+        <div>
+          <label for="system-shuffler-shuffle-once-on-install">shuffle once upon installation:</label>
+          <input name="system-shuffler-shuffle-once-on-install" id="system-shuffler-shuffle-once-on-install" type="checkbox" checked></input>
+        </div>
+        <div>
+          <label for="system-shuffler-shuffle-chance">chance to shuffle every time you land:</label>
+          <input id="system-shuffler-shuffle-chance" type="range" value=0 min=0 max=100></input>
+          <input id="system-shuffler-shuffle-chance-output" type="number" required value=0 min=0 max=100></input>
+        </div>
+        <div>
+          <label for="system-shuffler-fixed-shuffle-days">shuffle every N days (0 to disable):</label>
+          <input id="system-shuffler-fixed-shuffle-days" type="range" value=0 min=0 max=100></input>
+          <input id="system-shuffler-fixed-shuffle-days-output" type="number" required value=0 min=0 max=100></input>
+        </div>
+      </fieldset>
+      <button id="system-shuffler-output" type="submit">Generate and download</button>
+    </form>
+    <form name="chaos-form" id="chaos-form">
       <h2>
         <a id="Chaos">Chaos</a>
       </h2>
@@ -136,14 +122,15 @@
         This plugin shuffles the sprites, thumbnails, and names of every ship and outfit.<br/>
         Everything will play the same, mostly, but the hitboxes for ships will be different and you won't know what anything is at a glance.<br/>
       </p>
-      <div>
-        <label>seed:</label>
-      </div>
-      <div>
-        <input id="chaos-seed" type="number" value=0></input>
-      </div>
-      <input id="chaos-output" type="button" value="Download"></input>
-    </div>
+      <fieldset>
+        <legend>Chaos Settings:</legend>
+        <div>
+          <label for="chaos-seed">seed:</label>
+          <input name="chaos-seed" id="chaos-seed" type="number" required value=0></input>
+        </div>
+      </fieldset>
+      <button id="chaos-output" type="submit">Generate and download</button>
+    </form>
     <script type="module" src="./index.js"></script>
   </body>
 </html>
