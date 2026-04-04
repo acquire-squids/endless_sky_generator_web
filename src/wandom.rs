@@ -172,9 +172,9 @@ impl XoShiRo256SS {
         maximum
             .max(minimum)
             .checked_sub(minimum.min(maximum))
-            .map_or(0, |num_range| {
+            .map_or(minimum, |num_range| {
                 if num_range == 0 {
-                    return num_range;
+                    return minimum;
                 }
 
                 let bits = num_range.checked_ilog2().unwrap_or_default() + 1;
