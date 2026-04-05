@@ -4,7 +4,7 @@ Web version of a generator for some [Endless Sky](<https://github.com/endless-sk
 ## Usage
 1. Go to [this page](https://acquire-squids.github.io/endless_sky_generator_web/) , or clone the repository and host it as a web server<sup>1 2</sup>.
 2. Leave "include data from stable release" checked, or click the upload button and choose an Endless Sky data folder.
-  - Plugins can be uploaded for use alongside regular game data, in theory.  I offer no guarantees.
+   - Plugins can be uploaded for use alongside regular game data, in theory.  I offer no guarantees.
 3. Press the download button for the plugin(s) you want to generate.
 4. Move the zip files you generated to the game's plugin directory.
 5. Play the game.
