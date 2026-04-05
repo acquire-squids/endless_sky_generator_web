@@ -22,7 +22,7 @@ If you have cargo and rustup:
 
 ### Web
 1. `rustup target add wasm32-unknown-unknown`
-2. `cargo install --version =0.2.114 wasm-bindgen-cli`
+2. `cargo install --version =0.2.117 wasm-bindgen-cli`
 3. `cargo build --target wasm32-unknown-unknown --release --lib`
 4. `wasm-bindgen --target web "target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm" --no-typescript --out-dir "./www"`
 
