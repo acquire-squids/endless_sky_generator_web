@@ -28,12 +28,13 @@ const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
 pub mod config {
     crate::macros::wasm_newtype! {
         in main =>
+        #[derive(Debug)]
         pub SystemShufflerConfig ;
-        pub seed: u64,
-        pub max_presets: u8,
-        pub shuffle_chance: u8,
-        pub fixed_shuffle_days: u8,
-        pub shuffle_once_on_install: bool,
+        seed: u64,
+        max_presets: u8,
+        shuffle_chance: u8,
+        fixed_shuffle_days: u8,
+        shuffle_once_on_install: bool,
     }
 }
 
@@ -50,7 +51,7 @@ pub fn process_data(
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = data_folder.data();
 
-    let mut rng = XoShiRo256SS::new(settings.seed);
+    let mut rng = XoShiRo256SS::new(*settings.seed());
     let mut output = vec![];
 
     let mut generator = SystemShuffler {
@@ -91,7 +92,7 @@ pub fn process_data(
 
     generator.archive.write_dir("data/presets/")?;
 
-    for preset_index in 0..=(generator.settings.max_presets) {
+    for preset_index in 0..=(*generator.settings.max_presets()) {
         generator.preset(
             data,
             &mut rng,
@@ -135,25 +136,25 @@ impl SystemShuffler<'_> {
             {}\
             {}
             ",
-            if self.settings.shuffle_once_on_install {
+            if *self.settings.shuffle_once_on_install() {
                 "In addition to shuffling once immediately upon installation, this plugin was generated with the following settings:\n"
             } else {
                 "This plugin was generated with the following settings:\n"
             },
-            self.settings.seed,
-            self.settings.max_presets,
-            if self.settings.shuffle_chance > 0 {
+            self.settings.seed(),
+            self.settings.max_presets(),
+            if *self.settings.shuffle_chance() > 0 {
                 format!(
                     "- A {}% chance to shuffle to a different preset every time you land\n",
-                    self.settings.shuffle_chance
+                    self.settings.shuffle_chance()
                 )
             } else {
                 String::new()
             },
-            if self.settings.fixed_shuffle_days > 0 {
+            if *self.settings.fixed_shuffle_days() > 0 {
                 format!(
                     "- A guaranteed shuffle roughly once every {} days\n",
-                    self.settings.fixed_shuffle_days
+                    self.settings.fixed_shuffle_days()
                 )
             } else {
                 String::new()
@@ -232,9 +233,9 @@ impl SystemShuffler<'_> {
         self.output_data
             .push_child(main_mission, main_mission_to_offer);
 
-        if self.settings.shuffle_chance == 0
-            && self.settings.fixed_shuffle_days == 0
-            && !self.settings.shuffle_once_on_install
+        if *self.settings.shuffle_chance() == 0
+            && *self.settings.fixed_shuffle_days() == 0
+            && !*self.settings.shuffle_once_on_install()
         {
             let main_mission_never = tree_from_tokens!(
                 &mut self.output_data; main_mission_source =>
@@ -252,27 +253,27 @@ impl SystemShuffler<'_> {
             self.output_data
                 .push_child(main_mission_to_offer, main_mission_to_offer_or);
 
-            if self.settings.shuffle_chance > 0 {
+            if *self.settings.shuffle_chance() > 0 {
                 let random_chance = tree_from_tokens!(
                     &mut self.output_data; main_mission_source =>
-                    : "random", "<", self.settings.shuffle_chance ;
+                    : "random", "<", self.settings.shuffle_chance() ;
                 );
 
                 self.output_data
                     .push_child(main_mission_to_offer_or, random_chance);
             }
 
-            if self.settings.fixed_shuffle_days > 0 {
+            if *self.settings.fixed_shuffle_days() > 0 {
                 let guaranteed = tree_from_tokens!(
                     &mut self.output_data; main_mission_source =>
-                    : "days since epoch", ">=", "(", LAST_SHUFFLE_DAY, "+", self.settings.fixed_shuffle_days, ")" ;
+                    : "days since epoch", ">=", "(", LAST_SHUFFLE_DAY, "+", self.settings.fixed_shuffle_days(), ")" ;
                 );
 
                 self.output_data
                     .push_child(main_mission_to_offer_or, guaranteed);
             }
 
-            if self.settings.shuffle_once_on_install {
+            if *self.settings.shuffle_once_on_install() {
                 let first_time = tree_from_tokens!(
                     &mut self.output_data; main_mission_source =>
                     : "not", INSTALLED ;
@@ -325,7 +326,7 @@ impl SystemShuffler<'_> {
         reset: bool,
         persistent_event_node_keys: &[&str],
     ) {
-        for preset_index in 0..=(self.settings.max_presets) {
+        for preset_index in 0..=(*self.settings.max_presets()) {
             self.conditional_events(
                 (source, node),
                 (false, RESTORE_PREFIX, "restore"),
@@ -338,7 +339,7 @@ impl SystemShuffler<'_> {
 
         self.output_data.push_child(node, preset_selection);
 
-        for preset_index in 0..=(self.settings.max_presets) {
+        for preset_index in 0..=(*self.settings.max_presets()) {
             self.conditional_events(
                 (source, node),
                 (true, ACTIVATE_PREFIX, "activate"),
@@ -365,7 +366,7 @@ impl SystemShuffler<'_> {
                 : "action" ;
                 {
                     : INSTALLED, "=", "1" ;
-                    : CURRENT_PRESET, "=", "(", format!("roll: {}", self.settings.max_presets).as_str(), "+", "1", ")" ;
+                    : CURRENT_PRESET, "=", "(", format!("roll: {}", self.settings.max_presets()).as_str(), "+", "1", ")" ;
                     : LAST_SHUFFLE_DAY, "=", "days since epoch" ;
                 }
             )
@@ -443,7 +444,7 @@ impl SystemShuffler<'_> {
             : "mission", "System Shuffler: Manual Shuffle" ;
             {
                 : "name", "Shuffle the universe" ;
-                : "description", format!("Shuffle all systems in the universe to one of {} presets.", self.settings.max_presets).as_str() ;
+                : "description", format!("Shuffle all systems in the universe to one of {} presets.", self.settings.max_presets()).as_str() ;
                 : "repeat" ;
                 : "job" ;
             }
@@ -820,7 +821,7 @@ impl SystemShuffler<'_> {
 
         self.output_data.push_child(parent, event_label);
 
-        if preset_index == self.settings.max_presets {
+        if preset_index == *self.settings.max_presets() {
             let blank_action = tree_from_tokens!(
                 &mut self.output_data; source =>
                 : "action" ;

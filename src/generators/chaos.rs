@@ -21,6 +21,7 @@ const PLUGIN_VERSION: &str = "0.1.0";
 pub mod config {
     crate::macros::wasm_newtype! {
         in main =>
+        #[derive(Debug)]
         pub ChaosConfig;
         pub seed: u64,
     }
