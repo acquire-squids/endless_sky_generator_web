@@ -1,7 +1,3 @@
-mod chaos;
-mod full_map;
-mod system_shuffler;
-
 use endless_sky_rw::DataFolder;
 
 use std::{error::Error, io};
@@ -11,7 +7,9 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 #[allow(clippy::missing_errors_doc)]
 pub fn generate_full_map(paths: Vec<String>, sources: Vec<String>) -> Result<Vec<u8>, String> {
-    self::full_map::process_data(paths, sources).map_err(|e| e.to_string())
+    read_upload(paths, sources)
+        .and_then(|data_folder| crate::generators::full_map::process_data(&data_folder))
+        .map_err(|error| error.to_string())
 }
 
 #[wasm_bindgen]
@@ -19,9 +17,13 @@ pub fn generate_full_map(paths: Vec<String>, sources: Vec<String>) -> Result<Vec
 pub fn generate_system_shuffler(
     paths: Vec<String>,
     sources: Vec<String>,
-    settings: self::system_shuffler::config::SystemShufflerConfig,
+    settings: crate::generators::system_shuffler::config::SystemShufflerConfig,
 ) -> Result<Vec<u8>, String> {
-    self::system_shuffler::process_data(paths, sources, settings).map_err(|e| e.to_string())
+    read_upload(paths, sources)
+        .and_then(|data_folder| {
+            crate::generators::system_shuffler::process_data(&data_folder, settings)
+        })
+        .map_err(|error| error.to_string())
 }
 
 #[wasm_bindgen]
@@ -29,9 +31,11 @@ pub fn generate_system_shuffler(
 pub fn generate_chaos(
     paths: Vec<String>,
     sources: Vec<String>,
-    settings: self::chaos::config::ChaosConfig,
+    settings: &crate::generators::chaos::config::ChaosConfig,
 ) -> Result<Vec<u8>, String> {
-    self::chaos::process_data(paths, sources, settings).map_err(|e| e.to_string())
+    read_upload(paths, sources)
+        .and_then(|data_folder| crate::generators::chaos::process_data(&data_folder, settings))
+        .map_err(|error| error.to_string())
 }
 
 fn read_upload(paths: Vec<String>, sources: Vec<String>) -> Result<DataFolder, Box<dyn Error>> {
