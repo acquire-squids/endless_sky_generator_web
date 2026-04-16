@@ -19,7 +19,7 @@ It's probably possible to build without cargo and rustup, but I wouldn't know.
 
 I use them because I am casual and unconcerned.
 
-If you have cargo and rustup:
+If you have cargo and rustup with a Rust version >= [MSRV](#minimum-supported-rust-version):
 
 ### Web
 1. `rustup target add wasm32-unknown-unknown`
@@ -29,6 +29,11 @@ If you have cargo and rustup:
 
 ### Native
 1. `cargo build --target host-tuple --release --bins`
+
+### Minimum Supported Rust Version
+I like to stay on the latest stable version, so expect as such if you plan to build and there are recent commits.
+
+**Current MSRV: 1.95.0**
 
 ### Default Data
 You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
