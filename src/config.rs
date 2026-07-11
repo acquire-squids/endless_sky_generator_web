@@ -153,12 +153,9 @@ pub fn parse(source: &str) -> Option<Config<'_>> {
             {
                 at += 1;
 
-                match value(&tokens, &mut at) {
-                    Some(value) => {
-                        config.options.insert(name.lexeme, value);
-                    }
-                    None => return None,
-                }
+                let value = value(&tokens, &mut at)?;
+
+                config.options.insert(name.lexeme, value);
             } else {
                 eprintln!("Invalid config!");
 
