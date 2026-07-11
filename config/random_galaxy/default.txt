@@ -1,0 +1,724 @@
+name               = "Bingus Galaxy"
+seed               = 0
+reveal_all         = true
+
+sprite_name        = "ssc2019-15b-med.jpg"
+blob               = "config/random_galaxy/images/ui/ssc2019-15b-med.jpg"
+
+clusters = (
+	(
+		(capacity (
+			(size (1300.0 1300.0))
+			(system_count 81)
+		))
+		(system_placement (
+			(origin (12345.0 67890.0))
+			(wormhole "Rutilicus")
+			(max_link_length 100)
+			(link_chance 40.0)
+			(minimum_distance 33.3)
+			(step_size (50.0 87.5))
+		))
+		(system_names (
+			(max_length 64)
+			(source "Bingus")
+		))
+		(system_contents (
+			(star_groups (
+				(
+					(source "o")
+					(can_be_binary true)
+					(weight 2)
+					(max_planets 2)
+				)
+				(
+					(source "b")
+					(can_be_binary true)
+					(weight 6)
+					(max_planets 3)
+				)
+				(
+					(source "a")
+					(can_be_binary true)
+					(weight 26)
+					(max_planets 4)
+				)
+				(
+					(source "f")
+					(can_be_binary true)
+					(weight 22)
+					(max_planets 7)
+				)
+				(
+					(source "g")
+					(can_be_binary true)
+					(weight 85)
+					(max_planets 9)
+				)
+				(
+					(source "k")
+					(can_be_binary true)
+					(weight 98)
+					(max_planets 8)
+				)
+				(
+					(source "m")
+					(can_be_binary true)
+					(weight 82)
+					(max_planets 6)
+				)
+			))
+			(planet_groups (
+				(
+					(source "cloud")
+					(weight 1)
+					(distance_range_percentage (0.0 100.0))
+					(moons (
+						(chance 25.0)
+						(from_planet_groups (
+							("rock" (
+								(weight 1)
+							))
+							("dust" (
+								(weight 1)
+							))
+						))
+					))
+				)
+				(
+					(source "desert")
+					(weight 1)
+					(distance_range_percentage (25.0 45.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+				(
+					(source "dust")
+					(weight 1)
+					(distance_range_percentage (30.0 60.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+				(
+					(source "forest")
+					(weight 1)
+					(distance_range_percentage (50.0 85.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+				(
+					(source "gas")
+					(weight 1)
+					(distance_range_percentage (0.0 100.0))
+					(moons (
+						(chance 33.0)
+						(from_planet_groups (
+							("rock" (
+								(weight 1)
+							))
+							("dust" (
+								(weight 1)
+							))
+							("ocean" (
+								(weight 1)
+							))
+						))
+					))
+				)
+				(
+					(source "ice")
+					(weight 1)
+					(distance_range_percentage (80.0 100.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+				(
+					(source "lava")
+					(weight 1)
+					(distance_range_percentage (0.0 20.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+				(
+					(source "ocean")
+					(weight 1)
+					(distance_range_percentage (60.0 90.0))
+					(moons (
+						(chance 15.0)
+						(from_planet_groups (
+							("rock" (
+								(weight 1)
+							))
+							("dust" (
+								(weight 1)
+							))
+							("forest" (
+								(weight 1)
+							))
+						))
+					))
+				)
+				(
+					(source "rock")
+					(weight 1)
+					(distance_range_percentage (0.0 35.0))
+					(moons (
+						(chance 0.0)
+						(from_planet_groups ())
+					))
+				)
+			))
+		))
+	)
+)
+
+system_name_sources = (
+	(Bingus (
+		"Bingus"
+		"PlingThing"
+		"Bingling"
+		"Pingling"
+		"Bingi"
+		"Pingi"
+		"Bongi"
+		"Bingmin"
+		"Pingmin"
+		"Super Sillymin"
+		"Super Big Pingmin"
+		"Bongmin"
+		"Big Bongmin"
+		"Bingussprite"
+		"Pingussprite"
+		"Bongling"
+		"Pingling in G Major"
+		"Spoingus"
+		"Gumbus"
+	))
+)
+
+hottest_to_coolest_star_classes = `
+	O (33_000..       K),
+	B (10_000..33_000 K),
+	A ( 7_300..10_000 K),
+	F ( 6_000..7_300  K),
+	G ( 5_300..6_000  K),
+	K ( 3_900..5_300  K),
+	M ( 2_300..3_900  K)
+`
+
+habitable_zone_notes = `
+	Earth is near the beginning of the sun's habitable zone.
+	The distance from the sun to Earth is roughly 150 million kilometers.
+	(19 distance is about 3 million kilometers according to Endless Sky's Sol?)
+`
+
+star_temperature_notes = `
+	The number after the class (O, B, A, etc.) indicates how hot it is.
+	0 (hottest) to 9 (coolest).  Fractionals allowed (but unused here).
+
+	The sun is a G2.  (Does this mean it's ~5_440 K?)
+`
+
+binary_star_system_notes = `
+	Between one half to one third of star systems are binary.
+	S-type planets orbit one star (they're children of the star's node).
+	P-type planets orbit both stars (they're placed in the system root).
+
+	Let's limit to P-type for now.
+`
+
+star_groups = (
+	(o (
+		("star/o-supergiant" (
+			(habitable 14500)
+			(binary_distance 1000)
+		))
+		("star/o-giant" (
+			(habitable 11500)
+			(binary_distance 350)
+		))
+		("star/o-dwarf" (
+			(habitable 5855)
+			(binary_distance 100)
+		))
+		("star/o0" (
+			(habitable 8860)
+			(binary_distance 175)
+		))
+		("star/o3" (
+			(habitable 7960)
+			(binary_distance 175)
+		))
+		("star/o5" (
+			(habitable 7360)
+			(binary_distance 175)
+		))
+		("star/o8" (
+			(habitable 6200)
+			(binary_distance 175)
+		))
+	))
+	(b (
+		("star/b-supergiant" (
+			(habitable 5320)
+			(binary_distance 1000)
+		))
+		("star/b-giant" (
+			(habitable 3990)
+			(binary_distance 350)
+		))
+		("star/b-dwarf" (
+			(habitable 1770)
+			(binary_distance 100)
+		))
+		("star/b0" (
+			(habitable 3000)
+			(binary_distance 175)
+		))
+		("star/b3" (
+			(habitable 2710)
+			(binary_distance 175)
+		))
+		("star/b5" (
+			(habitable 2510)
+			(binary_distance 175)
+		))
+		("star/b8" (
+			(habitable 2220)
+			(binary_distance 175)
+		))
+	))
+	(a (
+		("star/a-supergiant" (
+			(habitable 2540)
+			(binary_distance 1000)
+		))
+		("star/a-giant" (
+			(habitable 1860)
+			(binary_distance 350)
+		))
+		("star/a-dwarf" (
+			(habitable 1300)
+			(binary_distance 100)
+		))
+		("star/a0" (
+			(habitable 1470)
+			(binary_distance 175)
+		))
+		("star/a3" (
+			(habitable 1420)
+			(binary_distance 175)
+		))
+		("star/a5" (
+			(habitable 1380)
+			(binary_distance 175)
+		))
+		("star/a8" (
+			(habitable 1350)
+			(binary_distance 175)
+		))
+	))
+	(f (
+		("star/f-supergiant" (
+			(habitable 1930)
+			(binary_distance 1000)
+		))
+		("star/f-giant" (
+			(habitable 1500)
+			(binary_distance 350)
+		))
+		("star/f-dwarf" (
+			(habitable 1060)
+			(binary_distance 100)
+		))
+		("star/f0" (
+			(habitable 1230)
+			(binary_distance 175)
+		))
+		("star/f3" (
+			(habitable 1180)
+			(binary_distance 175)
+		))
+		("star/f5" (
+			(habitable 1150)
+			(binary_distance 175)
+		))
+		("star/f8" (
+			(habitable 1110)
+			(binary_distance 175)
+		))
+	))
+	(g (
+		("star/g-supergiant" (
+			(habitable 1590)
+			(binary_distance 1000)
+		))
+		("star/g-giant" (
+			(habitable 1230)
+			(binary_distance 350)
+		))
+		("star/g-dwarf" (
+			(habitable 940)
+			(binary_distance 100)
+		))
+		("star/g0" (
+			(habitable 1020)
+			(binary_distance 175)
+		))
+		("star/g3" (
+			(habitable 1000)
+			(binary_distance 175)
+		))
+		("star/g5" (
+			(habitable 980)
+			(binary_distance 175)
+		))
+		("star/g8" (
+			(habitable 960)
+			(binary_distance 175)
+		))
+	))
+	(k (
+		("star/k-supergiant" (
+			(habitable 1400)
+			(binary_distance 1000)
+		))
+		("star/k-giant" (
+			(habitable 1080)
+			(binary_distance 350)
+		))
+		("star/k-dwarf" (
+			(habitable 690)
+			(binary_distance 100)
+		))
+		("star/k0" (
+			(habitable 880)
+			(binary_distance 175)
+		))
+		("star/k3" (
+			(habitable 830)
+			(binary_distance 175)
+		))
+		("star/k5" (
+			(habitable 800)
+			(binary_distance 175)
+		))
+		("star/k8" (
+			(habitable 760)
+			(binary_distance 175)
+		))
+	))
+	(m (
+		("star/m-supergiant" (
+			(habitable 1040)
+			(binary_distance 1000)
+		))
+		("star/m-giant" (
+			(habitable 790)
+			(binary_distance 350)
+		))
+		("star/m-dwarf" (
+			(habitable 410)
+			(binary_distance 100)
+		))
+		("star/m0" (
+			(habitable 630)
+			(binary_distance 175)
+		))
+		("star/m3" (
+			(habitable 570)
+			(binary_distance 175)
+		))
+		("star/m4" (
+			(habitable 550)
+			(binary_distance 175)
+		))
+		("star/m5" (
+			(habitable 530)
+			(binary_distance 175)
+		))
+		("star/m8" (
+			(habitable 470)
+			(binary_distance 175)
+		))
+	))
+)
+
+planet_groups = (
+	(cloud (
+		(sprites (
+			"planet/cloud0-b"
+			"planet/cloud0"
+			"planet/cloud1-b"
+			"planet/cloud1"
+			"planet/cloud2-b"
+			"planet/cloud2"
+			"planet/cloud3-b"
+			"planet/cloud3"
+			"planet/cloud4-b"
+			"planet/cloud4"
+			"planet/cloud5-b"
+			"planet/cloud5"
+			"planet/cloud6-b"
+			"planet/cloud6"
+			"planet/cloud7-b"
+			"planet/cloud7"
+			"planet/cloud8-b"
+			"planet/cloud8"
+		))
+	))
+	(desert (
+		(sprites (
+			"planet/desert0-b"
+			"planet/desert0"
+			"planet/desert1-b"
+			"planet/desert1"
+			"planet/desert2-b"
+			"planet/desert2"
+			"planet/desert3-b"
+			"planet/desert3"
+			"planet/desert4-b"
+			"planet/desert4"
+			"planet/desert5-b"
+			"planet/desert5"
+			"planet/desert6-b"
+			"planet/desert6"
+			"planet/desert7-b"
+			"planet/desert7"
+			"planet/desert8-b"
+			"planet/desert8"
+			"planet/desert9-b"
+			"planet/desert9"
+			"planet/desert10-b"
+			"planet/desert10"
+			"planet/desert11"
+			"planet/desert12"
+			"planet/desert13"
+		))
+	))
+	(dust (
+		(sprites (
+			"planet/dust0-b"
+			"planet/dust0"
+			"planet/dust1-b"
+			"planet/dust1"
+			"planet/dust2-b"
+			"planet/dust2"
+			"planet/dust3-b"
+			"planet/dust3"
+			"planet/dust4-b"
+			"planet/dust4"
+			"planet/dust5-b"
+			"planet/dust5"
+			"planet/dust6-b"
+			"planet/dust6"
+			"planet/dust7-b"
+			"planet/dust7"
+			"planet/dust8"
+			"planet/dust9"
+		))
+	))
+	(forest (
+		(sprites (
+			"planet/forest0-b"
+			"planet/forest0"
+			"planet/forest1-b"
+			"planet/forest1"
+			"planet/forest2-b"
+			"planet/forest2"
+			"planet/forest3-b"
+			"planet/forest3"
+			"planet/forest4-b"
+			"planet/forest4"
+			"planet/forest5-b"
+			"planet/forest5"
+			"planet/forest6-b"
+			"planet/forest6"
+			"planet/forest7"
+			"planet/forest8"
+			"planet/forest9"
+			"planet/forest10"
+			"planet/forest11"
+			"planet/forest12"
+		))
+	))
+	(gas (
+		(sprites (
+			"planet/gas0-b"
+			"planet/gas0-hot"
+			"planet/gas0"
+			"planet/gas1-b"
+			"planet/gas1-hot"
+			"planet/gas1"
+			"planet/gas2-b"
+			"planet/gas2-hot"
+			"planet/gas2"
+			"planet/gas3-b"
+			"planet/gas3-c"
+			"planet/gas3-hot"
+			"planet/gas3"
+			"planet/gas4-b"
+			"planet/gas4-hot"
+			"planet/gas4"
+			"planet/gas5-b"
+			"planet/gas5-hot"
+			"planet/gas5"
+			"planet/gas6-b"
+			"planet/gas6-hot"
+			"planet/gas6"
+			"planet/gas7-b"
+			"planet/gas7-hot"
+			"planet/gas7"
+			"planet/gas8-b"
+			"planet/gas8-hot"
+			"planet/gas8"
+			"planet/gas9-b"
+			"planet/gas9-hot"
+			"planet/gas9"
+			"planet/gas10-b"
+			"planet/gas10-hot"
+			"planet/gas10"
+			"planet/gas11-b"
+			"planet/gas11"
+			"planet/gas12-b"
+			"planet/gas12"
+			"planet/gas13-b"
+			"planet/gas13"
+			"planet/gas14-b"
+			"planet/gas14"
+			"planet/gas15-b"
+			"planet/gas15"
+			"planet/gas16-b"
+			"planet/gas16"
+			"planet/gas17-b"
+			"planet/gas17"
+		))
+	))
+	(ice (
+		(sprites (
+			"planet/ice0-b"
+			"planet/ice0"
+			"planet/ice1-b"
+			"planet/ice1"
+			"planet/ice2-b"
+			"planet/ice2"
+			"planet/ice3-b"
+			"planet/ice3"
+			"planet/ice4-b"
+			"planet/ice4"
+			"planet/ice5-b"
+			"planet/ice5"
+			"planet/ice6-b"
+			"planet/ice6"
+			"planet/ice7-b"
+			"planet/ice7"
+			"planet/ice8-b"
+			"planet/ice8"
+			"planet/ice9"
+			"planet/ice10"
+			"planet/ice11"
+			"planet/ice12"
+		))
+	))
+	(lava (
+		(sprites (
+			"planet/lava0-b"
+			"planet/lava0"
+			"planet/lava1-b"
+			"planet/lava1"
+			"planet/lava2-b"
+			"planet/lava2"
+			"planet/lava3-b"
+			"planet/lava3"
+			"planet/lava4-b"
+			"planet/lava4"
+			"planet/lava5-b"
+			"planet/lava5"
+			"planet/lava6-b"
+			"planet/lava6"
+			"planet/lava7-b"
+			"planet/lava7"
+		))
+	))
+	(ocean (
+		(sprites (
+			"planet/ocean0-b"
+			"planet/ocean0"
+			"planet/ocean1-b"
+			"planet/ocean1"
+			"planet/ocean2-b"
+			"planet/ocean2"
+			"planet/ocean3-b"
+			"planet/ocean3"
+			"planet/ocean4-b"
+			"planet/ocean4"
+			"planet/ocean5-b"
+			"planet/ocean5"
+			"planet/ocean6-b"
+			"planet/ocean6"
+			"planet/ocean7-b"
+			"planet/ocean7"
+			"planet/ocean8-b"
+			"planet/ocean8"
+			"planet/ocean9-b"
+			"planet/ocean9"
+			"planet/ocean10"
+		))
+	))
+	(rock (
+		(sprites (
+			"planet/rock0-b"
+			"planet/rock0"
+			"planet/rock1-b"
+			"planet/rock1"
+			"planet/rock2-b"
+			"planet/rock2"
+			"planet/rock3-b"
+			"planet/rock3"
+			"planet/rock4-b"
+			"planet/rock4"
+			"planet/rock5-b"
+			"planet/rock5"
+			"planet/rock6-b"
+			"planet/rock6"
+			"planet/rock7-b"
+			"planet/rock7"
+			"planet/rock8-b"
+			"planet/rock8"
+			"planet/rock9-b"
+			"planet/rock9"
+			"planet/rock10-b"
+			"planet/rock10"
+			"planet/rock11-b"
+			"planet/rock11"
+			"planet/rock12-b"
+			"planet/rock12"
+			"planet/rock13-b"
+			"planet/rock13"
+			"planet/rock14-b"
+			"planet/rock14"
+			"planet/rock15-b"
+			"planet/rock15"
+			"planet/rock16-b"
+			"planet/rock16"
+			"planet/rock17-b"
+			"planet/rock17"
+			"planet/rock18-b"
+			"planet/rock18"
+			"planet/rock19-b"
+			"planet/rock19"
+			"planet/rock20"
+			"planet/rock21"
+		))
+	))
+)

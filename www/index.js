@@ -14,7 +14,12 @@ import {
   preparation as chaos_preparation
 } from "./generators/chaos.js";
 
+import {
+  preparation as random_galaxy_preparation
+} from "./generators/random_galaxy.js";
+
 full_map_preparation();
 system_shuffler_preparation();
 chaos_preparation();
+random_galaxy_preparation();
 
