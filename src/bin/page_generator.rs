@@ -10,6 +10,7 @@ cfg_select! {
         fn main() -> std::io::Result<()> {
             let html = html::page_contents();
 
+            fs::create_dir_all("output/")?;
             fs::write("output/index.html", html)
         }
     }
