@@ -194,6 +194,17 @@ impl SystemShuffler<'_> {
         self.output_data
             .push_root_node(plugin_txt_source, plugin_version);
 
+        let dependencies = tree_from_tokens!(
+            &mut self.output_data; plugin_txt_source =>
+            : "dependencies" ;
+            {
+                : "game version", crate::GAME_VERSION ;
+            }
+        );
+
+        self.output_data
+            .push_root_node(plugin_txt_source, dependencies);
+
         self.zip_root_nodes("plugin.txt", output_root_node_count)
     }
 
