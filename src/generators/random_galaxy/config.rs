@@ -884,7 +884,12 @@ pub mod from_file {
 }
 
 pub mod page {
-    use crate::html::{self, HtmlElement};
+    use crate::{
+        generators::random_galaxy::config,
+        html::{self, HtmlElement},
+    };
+
+    const DEFAULT_CONFIG_FILE: &str = include_str!("../../../config/random_galaxy/default.txt");
 
     #[must_use]
     pub fn random_galaxy() -> HtmlElement {
@@ -914,61 +919,138 @@ pub mod page {
     }
 
     fn random_galaxy_fieldset() -> HtmlElement {
+        let settings = config::from_file::parse(DEFAULT_CONFIG_FILE);
+        let settings = settings.as_ref();
+
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("Random Galaxy Settings:"))
             .with_element(html::page::labeled(
                 "random-galaxy-name",
+                "",
                 "galaxy name:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "text")
-                    .required(),
+                {
+                    let input = HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required();
+
+                    if let Some(settings) = settings {
+                        input.with_attribute("value", settings.name().as_str())
+                    } else {
+                        input
+                    }
+                },
             ))
             .with_element(html::page::labeled(
                 "random-galaxy-sprite",
+                "",
                 "galaxy sprite:",
                 HtmlElement::new("input")
                     .with_attribute("type", "file")
                     .with_attribute("accept", "image/*")
                     .required(),
             ))
-            .with_element(html::page::labeled(
-                "random-galaxy-seed",
-                "seed:",
-                HtmlElement::new("input")
+            .with_element(html::page::labeled("random-galaxy-seed", "", "seed:", {
+                let input = HtmlElement::new("input")
                     .with_attribute("type", "number")
-                    .required()
-                    .with_attribute("value", 0u32),
-            ))
+                    .required();
+
+                if let Some(settings) = settings {
+                    input.with_attribute("value", *settings.seed())
+                } else {
+                    input
+                }
+            }))
             .with_element(html::page::labeled(
                 "random-galaxy-reveal-all",
+                "",
                 "reveal all systems:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "checkbox")
-                    .checked(),
+                {
+                    let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                    if let Some(settings) = settings
+                        && *settings.reveal_all()
+                    {
+                        input.checked()
+                    } else {
+                        input
+                    }
+                },
             ))
-            .with_element(random_galaxy_clusters_fieldset())
-            .with_element(random_galaxy_system_name_sources_fieldset())
-            .with_element(random_galaxy_star_groups_fieldset())
-            .with_element(random_galaxy_planet_groups_fieldset())
+            .with_element(random_galaxy_clusters_fieldset(settings))
+            .with_element(random_galaxy_system_name_sources_fieldset(settings))
+            .with_element(random_galaxy_star_groups_fieldset(settings))
+            .with_element(random_galaxy_planet_groups_fieldset(settings))
     }
 
-    fn random_galaxy_clusters_fieldset() -> HtmlElement {
+    fn random_galaxy_clusters_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "System Clusters:",
+            "New system cluster",
+            if let Some(settings) = settings
+                && !settings.clusters().is_empty()
+            {
+                settings
+                    .clusters()
+                    .iter()
+                    .enumerate()
+                    .map(|(cluster_index, cluster)| {
+                        html::page::fieldset(
+                            "random-galaxy-cluster",
+                            cluster_index.to_string(),
+                            "System Cluster:",
+                            "Remove system cluster",
+                            vec![
+                                random_galaxy_cluster_capacity_fieldset(Some((
+                                    cluster_index,
+                                    cluster,
+                                ))),
+                                random_galaxy_cluster_placement_fieldset(Some((
+                                    cluster_index,
+                                    cluster,
+                                ))),
+                                random_galaxy_cluster_system_names_fieldset(
+                                    Some(settings),
+                                    Some((cluster_index, cluster)),
+                                ),
+                                random_galaxy_cluster_star_groups_fieldset(
+                                    Some(settings),
+                                    Some((cluster_index, cluster)),
+                                ),
+                                random_galaxy_cluster_planet_groups_fieldset(
+                                    Some(settings),
+                                    Some((cluster_index, cluster)),
+                                ),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_cluster_default()]
+            },
+        )
+    }
+
+    fn random_galaxy_cluster_default() -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-cluster",
+            "",
             "System Cluster:",
-            ("Remove system cluster", "New system cluster"),
+            "Remove system cluster",
             vec![
-                random_galaxy_cluster_capacity_fieldset(),
-                random_galaxy_cluster_placement_fieldset(),
-                random_galaxy_cluster_system_names_fieldset(),
-                random_galaxy_cluster_star_groups_fieldset(),
-                random_galaxy_cluster_planet_groups_fieldset(),
+                random_galaxy_cluster_capacity_fieldset(None),
+                random_galaxy_cluster_placement_fieldset(None),
+                random_galaxy_cluster_system_names_fieldset(None, None),
+                random_galaxy_cluster_star_groups_fieldset(None, None),
+                random_galaxy_cluster_planet_groups_fieldset(None, None),
             ],
         )
     }
 
-    fn random_galaxy_cluster_capacity_fieldset() -> HtmlElement {
+    fn random_galaxy_cluster_capacity_fieldset(
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("System Cluster Capacity:"))
             .with_div(html::page::labeled_min_max(
@@ -976,69 +1058,138 @@ pub mod page {
                     "random-galaxy-cluster-width",
                     "random-galaxy-cluster-height",
                 ),
+                (
+                    cluster
+                        .map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
+                    cluster
+                        .map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
+                ),
                 "cluster size:",
-                (1024u32, 1024u32),
-                (100u32, 16384u32),
+                cluster.map_or((1024.0, 1024.0), |(_, cluster)| {
+                    (
+                        *cluster.capacity().size().x(),
+                        *cluster.capacity().size().y(),
+                    )
+                }),
+                (100.0, 16384.0),
                 false,
             ))
             .with_element(html::page::labeled(
                 "random-galaxy-cluster-system-count",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "maximum systems (may generate less):",
-                HtmlElement::new("input")
-                    .with_attribute("type", "number")
-                    .required()
-                    .with_attribute("min", 1u32),
+                {
+                    let input = HtmlElement::new("input")
+                        .with_attribute("type", "number")
+                        .required()
+                        .with_attribute("min", 1usize);
+
+                    if let Some((_, cluster)) = cluster {
+                        input.with_attribute("value", *cluster.capacity().system_count())
+                    } else {
+                        input
+                    }
+                },
             ))
     }
 
-    fn random_galaxy_cluster_placement_fieldset() -> HtmlElement {
+    #[allow(clippy::too_many_lines)]
+    fn random_galaxy_cluster_placement_fieldset(
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("System Cluster Placement:"))
             .with_div(
                 HtmlElement::new("label")
                     .with_text("origin point: ")
-                    .with_element(
-                        HtmlElement::new("input")
+                    .with_element({
+                        let input = HtmlElement::new("input")
                             .with_class("random-galaxy-cluster-origin-x")
-                            .with_name("random-galaxy-cluster-origin-x")
-                            .with_id("random-galaxy-cluster-origin-x")
+                            .with_name(format!(
+                                "random-galaxy-cluster-origin-x-{}",
+                                cluster
+                                    .map_or_else(String::new, |(cluster_index, _)| cluster_index
+                                        .to_string())
+                            ))
+                            .with_id(format!(
+                                "random-galaxy-cluster-origin-x-{}",
+                                cluster
+                                    .map_or_else(String::new, |(cluster_index, _)| cluster_index
+                                        .to_string())
+                            ))
                             .with_attribute("type", "number")
-                            .required(),
-                    )
-                    .with_element(
-                        HtmlElement::new("input")
+                            .required();
+
+                        if let Some((_, cluster)) = cluster {
+                            input.with_attribute("value", *cluster.placement().origin().x())
+                        } else {
+                            input
+                        }
+                    })
+                    .with_element({
+                        let input = HtmlElement::new("input")
                             .with_class("random-galaxy-cluster-origin-y")
-                            .with_name("random-galaxy-cluster-origin-y")
-                            .with_id("random-galaxy-cluster-origin-y")
+                            .with_name(format!(
+                                "random-galaxy-cluster-origin-y-{}",
+                                cluster
+                                    .map_or_else(String::new, |(cluster_index, _)| cluster_index
+                                        .to_string())
+                            ))
+                            .with_id(format!(
+                                "random-galaxy-cluster-origin-y-{}",
+                                cluster
+                                    .map_or_else(String::new, |(cluster_index, _)| cluster_index
+                                        .to_string())
+                            ))
                             .with_attribute("type", "number")
-                            .required(),
-                    ),
+                            .required();
+
+                        if let Some((_, cluster)) = cluster {
+                            input.with_attribute("value", *cluster.placement().origin().y())
+                        } else {
+                            input
+                        }
+                    }),
             )
             .with_element(html::page::labeled(
                 "random-galaxy-cluster-wormhole",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "place the wormhole to the cluster in this system:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "text")
-                    .required(),
+                {
+                    let input = HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required();
+
+                    if let Some((_, cluster)) = cluster {
+                        input.with_attribute("value", cluster.placement().wormhole().as_str())
+                    } else {
+                        input
+                    }
+                },
             ))
             .with_element(html::page::labeled_range(
                 "random-galaxy-cluster-max-link-length",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "maximum hyperspace link length:",
-                100u32,
-                (40u32, 255u32),
+                cluster.map_or(100u16, |(_, cluster)| {
+                    *cluster.placement().max_link_length()
+                }),
+                (40u16, 255u16),
                 false,
             ))
             .with_element(html::page::labeled_range(
                 "random-galaxy-cluster-link-chance",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "chance for other systems to link:",
-                40u32,
-                (0u32, 100u32),
+                cluster.map_or(40.0, |(_, cluster)| *cluster.placement().link_chance()),
+                (0.0, 100.0),
                 false,
             ))
             .with_element(html::page::labeled_range(
                 "random-galaxy-cluster-minimum-distance",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "prevent systems within this distance of each other:",
-                33.3,
+                cluster.map_or(33.3, |(_, cluster)| *cluster.placement().minimum_distance()),
                 (16.0, 50.0),
                 true,
             ))
@@ -1047,44 +1198,164 @@ pub mod page {
                     "random-galaxy-cluster-step-size-min",
                     "random-galaxy-cluster-step-size-max",
                 ),
+                (
+                    cluster
+                        .map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
+                    cluster
+                        .map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
+                ),
                 "systems are placed within this range of each other:",
-                (50.0, 87.5),
+                cluster.map_or((50.0, 87.5), |(_, cluster)| {
+                    (
+                        *cluster.placement().step_size().min(),
+                        *cluster.placement().step_size().max(),
+                    )
+                }),
                 (20.0, 100.0),
                 true,
             ))
     }
 
-    fn random_galaxy_cluster_system_names_fieldset() -> HtmlElement {
+    fn random_galaxy_cluster_system_names_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("System Cluster System Names:"))
             .with_element(html::page::labeled_range(
                 "random-galaxy-cluster-max-system-name-length",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "maximum system name length:",
-                64u32,
-                (16u32, 255u32),
+                cluster.map_or(64u8, |(_, cluster)| *cluster.names().max_length()),
+                (16u8, 255u8),
                 false,
             ))
             .with_element(html::page::labeled(
                 "random-galaxy-cluster-system-names-examples-group",
+                cluster.map_or_else(String::new, |(cluster_index, _)| cluster_index.to_string()),
                 "example name group to use as a Markov chain:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "text")
-                    .required(),
+                {
+                    let input = HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required();
+
+                    if let Some(settings) = settings
+                        && let Some((_, cluster)) = cluster
+                    {
+                        input.with_attribute(
+                            "value",
+                            settings
+                                .system_name_sources()
+                                .groups()
+                                .get(*cluster.names().source_index())
+                                .map_or("", |example_name_group| example_name_group.group_name()),
+                        )
+                    } else {
+                        input
+                    }
+                },
             ))
     }
 
-    fn random_galaxy_cluster_star_groups_fieldset() -> HtmlElement {
+    fn random_galaxy_cluster_star_groups_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "System Cluster Star Groups:",
+            "New system cluster star group",
+            if let Some(settings) = settings
+                && let Some((cluster_index, cluster)) = cluster
+                && !cluster.contents().stars().is_empty()
+            {
+                cluster
+                    .contents()
+                    .stars()
+                    .iter()
+                    .enumerate()
+                    .map(|(cluster_star_group_index, cluster_star_group)| {
+                        html::page::fieldset(
+                            "random-galaxy-cluster-star-group",
+                            format!("{cluster_index}-{cluster_star_group_index}"),
+                            "System Cluster Star Group:",
+                            "Remove system cluster star group",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-cluster-star-group-name",
+                                    format!("{cluster_index}-{cluster_star_group_index}"),
+                                    "star group name:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute(
+                                            "value",
+                                            settings
+                                                .sprites()
+                                                .stars()
+                                                .groups()
+                                                .get(*cluster_star_group.group_index())
+                                                .map_or("", |star_group| star_group.group_name()),
+                                        ),
+                                ),
+                                html::page::labeled(
+                                    "random-galaxy-cluster-star-group-can-be-binary",
+                                    format!("{cluster_index}-{cluster_star_group_index}"),
+                                    "can be part of a dual-star system:",
+                                    {
+                                        let input = HtmlElement::new("input")
+                                            .with_attribute("type", "checkbox");
+
+                                        if *cluster_star_group.can_be_binary() {
+                                            input.checked()
+                                        } else {
+                                            input
+                                        }
+                                    },
+                                ),
+                                html::page::weight(
+                                    "random-galaxy-cluster-star-group-weight",
+                                    format!("{cluster_index}-{cluster_star_group_index}"),
+                                    Some(*cluster_star_group.weight()),
+                                ),
+                                html::page::labeled(
+                                    "random-galaxy-cluster-star-group-max-planets",
+                                    format!("{cluster_index}-{cluster_star_group_index}"),
+                                    "maximum planets in its system:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "number")
+                                        .required()
+                                        .with_attributes(vec![
+                                            ("value", *cluster_star_group.max_planets()),
+                                            ("min", 0u8),
+                                            ("max", 255u8),
+                                        ]),
+                                ),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_cluster_default_star_group(cluster)]
+            },
+        )
+    }
+
+    fn random_galaxy_cluster_default_star_group(
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-cluster-star-group",
+            cluster.map_or_else(String::new, |(cluster_index, _)| {
+                format!("{cluster_index}-0")
+            }),
             "System Cluster Star Group:",
-            (
-                "Remove system cluster star group",
-                "New system cluster star group",
-            ),
+            "Remove system cluster star group",
             vec![
                 html::page::labeled(
                     "random-galaxy-cluster-star-group-name",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
                     "star group name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
@@ -1092,14 +1363,20 @@ pub mod page {
                 ),
                 html::page::labeled(
                     "random-galaxy-cluster-star-group-can-be-binary",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
                     "can be part of a dual-star system:",
                     HtmlElement::new("input")
                         .with_attribute("type", "checkbox")
                         .checked(),
                 ),
-                html::page::weight("random-galaxy-cluster-star-group-weight", None),
+                html::page::weight("random-galaxy-cluster-star-group-weight", "", None),
                 html::page::labeled(
                     "random-galaxy-cluster-star-group-max-planets",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
                     "maximum planets in its system:",
                     HtmlElement::new("input")
                         .with_attribute("type", "number")
@@ -1110,28 +1387,117 @@ pub mod page {
         )
     }
 
-    fn random_galaxy_cluster_planet_groups_fieldset() -> HtmlElement {
+    fn random_galaxy_cluster_planet_groups_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "System Cluster Planet Groups:",
+            "New system cluster planet group",
+            if let Some(settings) = settings
+                && let Some((cluster_index, cluster)) = cluster
+                && !cluster.contents().planets().is_empty()
+            {
+                cluster.contents().planets().iter().enumerate().map(|(cluster_planet_group_index, cluster_planet_group)| {
+                    html::page::fieldset(
+                        "random-galaxy-cluster-planet-group",
+                        format!("{cluster_index}-{cluster_planet_group_index}"),
+                        "System Cluster Planet Group:",
+                        "Remove system cluster planet group",
+                        vec![
+                            html::page::labeled(
+                                "random-galaxy-cluster-planet-group-name",
+                                format!("{cluster_index}-{cluster_planet_group_index}"),
+                                "planet group name:",
+                                HtmlElement::new("input")
+                                    .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute(
+                                            "value",
+                                            settings
+                                                .sprites()
+                                                .planets()
+                                                .groups()
+                                                .get(*cluster_planet_group.group_index())
+                                                .map_or("", |planet_group| planet_group.group_name()),
+                                        ),
+                            ),
+                            html::page::weight("random-galaxy-cluster-planet-group-weight",
+                                format!("{cluster_index}-{cluster_planet_group_index}"),
+                                Some(*cluster_planet_group.weight())
+                            ),
+                            html::page::labeled_min_max(
+                                (
+                                    "random-galaxy-cluster-planet-group-distance-range-percentage-min",
+                                    "random-galaxy-cluster-planet-group-distance-range-percentage-max",
+                                ),
+                                (
+                                    format!("{cluster_index}-{cluster_planet_group_index}"),
+                                    format!("{cluster_index}-{cluster_planet_group_index}"),
+                                ),
+                                "spawns within this percentage range of 2x the habitable zone:",
+                                (*cluster_planet_group.distance_range_percentage().min(), *cluster_planet_group.distance_range_percentage().max()),
+                                (0.0, 100.0),
+                                true,
+                            ),
+                            html::page::labeled_range(
+                                "random-galaxy-cluster-planet-moon-chance",
+                                format!("{cluster_index}-{cluster_planet_group_index}"),
+                                "Chance to have a moon:",
+                                *cluster_planet_group.moons().chance(),
+                                (0.0, 100.0),
+                                false,
+                            ),
+                            random_galaxy_cluster_planet_moons_fieldset(Some(settings), Some((cluster_index, cluster)), Some((cluster_planet_group_index, cluster_planet_group))),
+                        ]
+                    )
+                }).collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_cluster_default_planet_group(cluster)]
+            },
+        )
+    }
+
+    fn random_galaxy_cluster_default_planet_group(
+        cluster: Option<(usize, &config::Cluster)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-cluster-planet-group",
-            "System Cluster Planet Group:",
-            (
-                "Remove system cluster planet group",
-                "New system cluster planet group",
-            ),
+            cluster.map_or_else(String::new, |(cluster_index, _)| {
+                format!("{cluster_index}-0")
+            }),
+            "System Cluster Planet Group",
+            "Remove system cluster planet group",
             vec![
                 html::page::labeled(
                     "random-galaxy-cluster-planet-group-name",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
                     "planet group name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
                         .required(),
                 ),
-                html::page::weight("random-galaxy-cluster-planet-group-weight", None),
+                html::page::weight(
+                    "random-galaxy-cluster-planet-group-weight",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
+                    None,
+                ),
                 html::page::labeled_min_max(
                     (
                         "random-galaxy-cluster-planet-group-distance-range-percentage-min",
                         "random-galaxy-cluster-planet-group-distance-range-percentage-max",
+                    ),
+                    (
+                        cluster.map_or_else(String::new, |(cluster_index, _)| {
+                            format!("{cluster_index}-0")
+                        }),
+                        cluster.map_or_else(String::new, |(cluster_index, _)| {
+                            format!("{cluster_index}-0")
+                        }),
                     ),
                     "spawns within this percentage range of 2x the habitable zone:",
                     (50.0, 65.0),
@@ -1140,62 +1506,238 @@ pub mod page {
                 ),
                 html::page::labeled_range(
                     "random-galaxy-cluster-planet-moon-chance",
+                    cluster.map_or_else(String::new, |(cluster_index, _)| {
+                        format!("{cluster_index}-0")
+                    }),
                     "Chance to have a moon:",
                     12.5,
                     (0.0, 100.0),
                     false,
                 ),
-                random_galaxy_cluster_planet_moons_fieldset(),
+                random_galaxy_cluster_planet_moons_fieldset(None, None, None),
             ],
         )
     }
 
-    fn random_galaxy_cluster_planet_moons_fieldset() -> HtmlElement {
+    fn random_galaxy_cluster_planet_moons_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+        cluster: Option<(usize, &config::Cluster)>,
+        cluster_planet_group: Option<(usize, &config::ClusterPlanetGroup)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Planet groups as moons:",
+            "New moon",
+            if let Some(settings) = settings
+                && let Some((cluster_index, _)) = cluster
+                && let Some((cluster_planet_group_index, cluster_planet_group)) =
+                    cluster_planet_group
+                && !cluster_planet_group.moons().from_planet_groups().is_empty()
+            {
+                cluster_planet_group
+                    .moons()
+                    .from_planet_groups()
+                    .iter()
+                    .enumerate()
+                    .map(|(moon_index, moon)| {
+                        html::page::fieldset(
+                            "random-galaxy-cluster-planet-moon-group",
+                            format!("{cluster_index}-{cluster_planet_group_index}-{moon_index}"),
+                            "Planet group as moon:",
+                            "Remove moon",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-cluster-planet-moon-group-name",
+                                    format!(
+                                        "{cluster_index}-{cluster_planet_group_index}-{moon_index}"
+                                    ),
+                                    "planet group name:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute(
+                                            "value",
+                                            settings
+                                                .sprites()
+                                                .planets()
+                                                .groups()
+                                                .get(*moon.planet_group_index())
+                                                .map_or("", |planet_group| {
+                                                    planet_group.group_name()
+                                                }),
+                                        ),
+                                ),
+                                html::page::weight(
+                                    "random-galaxy-cluster-planet-moon-weight",
+                                    format!(
+                                        "{cluster_index}-{cluster_planet_group_index}-{moon_index}"
+                                    ),
+                                    Some(*moon.weight()),
+                                ),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_cluster_default_planet_moon_group(
+                    cluster,
+                    cluster_planet_group,
+                )]
+            },
+        )
+    }
+
+    fn random_galaxy_cluster_default_planet_moon_group(
+        cluster: Option<(usize, &config::Cluster)>,
+        cluster_planet_group: Option<(usize, &config::ClusterPlanetGroup)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-cluster-planet-moon-group",
-            "Planet groups as moon:",
-            ("Remove moon", "New moon"),
+            cluster.zip(cluster_planet_group).map_or_else(
+                String::new,
+                |((cluster_index, _), (cluster_planet_group_index, _))| {
+                    format!("{cluster_index}-{cluster_planet_group_index}")
+                },
+            ),
+            "Planet group as moon:",
+            "Remove moon",
             vec![
                 html::page::labeled(
                     "random-galaxy-cluster-planet-moon-group-name",
+                    cluster.zip(cluster_planet_group).map_or_else(
+                        String::new,
+                        |((cluster_index, _), (cluster_planet_group_index, _))| {
+                            format!("{cluster_index}-{cluster_planet_group_index}")
+                        },
+                    ),
                     "planet group name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
                         .required(),
                 ),
-                html::page::weight("random-galaxy-cluster-planet-moon-weight", None),
+                html::page::weight("random-galaxy-cluster-planet-moon-weight", "", None),
             ],
         )
     }
 
-    fn random_galaxy_system_name_sources_fieldset() -> HtmlElement {
+    fn random_galaxy_system_name_sources_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Example name groups:",
+            "New example name group",
+            if let Some(settings) = settings
+                && !settings.system_name_sources().groups().is_empty()
+            {
+                settings
+                    .system_name_sources()
+                    .groups()
+                    .iter()
+                    .enumerate()
+                    .map(|(example_name_group_index, example_name_group)| {
+                        html::page::fieldset(
+                            "random-galaxy-system-name-examples-group",
+                            example_name_group_index.to_string(),
+                            "Example name group:",
+                            "Remove example name group",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-system-name-examples-group-name",
+                                    example_name_group_index.to_string(),
+                                    "example name group name:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute(
+                                            "value",
+                                            example_name_group.group_name().as_str(),
+                                        ),
+                                ),
+                                random_galaxy_system_name_source_fieldset(Some((
+                                    example_name_group_index,
+                                    example_name_group,
+                                ))),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_example_name_group_default()]
+            },
+        )
+    }
+
+    fn random_galaxy_example_name_group_default() -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-system-name-examples-group",
+            "",
             "Example name group:",
-            ("Remove example name group", "New example name group"),
+            "Remove example name group",
             vec![
                 html::page::labeled(
                     "random-galaxy-system-name-examples-group-name",
+                    "",
                     "example name group name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
                         .required(),
                 ),
-                random_galaxy_system_name_source_fieldset(),
+                random_galaxy_system_name_source_fieldset(None),
             ],
         )
     }
 
-    fn random_galaxy_system_name_source_fieldset() -> HtmlElement {
+    fn random_galaxy_system_name_source_fieldset(
+        example_name_group: Option<(usize, &config::SystemNameSource)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Example names for systems to use via Markov chain:",
+            "New example name",
+            if let Some((example_name_group_index, example_name_group)) = example_name_group
+                && !example_name_group.names().is_empty()
+            {
+                example_name_group
+                    .names()
+                    .iter()
+                    .enumerate()
+                    .map(|(example_name_index, example_name)| {
+                        html::page::fieldset(
+                            "random-galaxy-system-name-examples",
+                            format!("{example_name_group_index}-{example_name_index}"),
+                            "Example name:",
+                            "Remove example name",
+                            vec![html::page::labeled(
+                                "random-galaxy-system-name-example",
+                                format!("{example_name_group_index}-{example_name_index}"),
+                                "name:",
+                                HtmlElement::new("input")
+                                    .with_attribute("type", "text")
+                                    .required()
+                                    .with_attribute("value", example_name.as_str()),
+                            )],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_default_example_name(example_name_group)]
+            },
+        )
+    }
+
+    fn random_galaxy_default_example_name(
+        example_name_group: Option<(usize, &config::SystemNameSource)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-system-name-examples",
+            example_name_group.map_or_else(String::new, |(example_name_group_index, _)| {
+                format!("{example_name_group_index}-0")
+            }),
             "Example name:",
-            ("Remove example name", "New example name"),
+            "Remove example name",
             vec![html::page::labeled(
                 "random-galaxy-system-name-example",
+                example_name_group.map_or_else(String::new, |(example_name_group_index, _)| {
+                    format!("{example_name_group_index}-0")
+                }),
                 "name:",
                 HtmlElement::new("input")
                     .with_attribute("type", "text")
@@ -1204,34 +1746,150 @@ pub mod page {
         )
     }
 
-    fn random_galaxy_star_groups_fieldset() -> HtmlElement {
+    fn random_galaxy_star_groups_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Star groups:",
+            "New star group",
+            if let Some(settings) = settings
+                && !settings.sprites().stars().groups().is_empty()
+            {
+                settings
+                    .sprites()
+                    .stars()
+                    .groups()
+                    .iter()
+                    .enumerate()
+                    .map(|(star_group_index, star_group)| {
+                        html::page::fieldset(
+                            "random-galaxy-star-group",
+                            star_group_index.to_string(),
+                            "Star Group:",
+                            "Remove star group",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-star-group-name",
+                                    star_group_index.to_string(),
+                                    "star group name:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute("value", star_group.group_name().as_str()),
+                                ),
+                                random_galaxy_star_group_fieldset(Some((
+                                    star_group_index,
+                                    star_group,
+                                ))),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_default_star_group()]
+            },
+        )
+    }
+
+    fn random_galaxy_default_star_group() -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-star-group",
+            "",
             "Star group:",
-            ("Remove star group", "New star group"),
+            "Remove star group",
             vec![
                 html::page::labeled(
                     "random-galaxy-star-group-name",
+                    "",
                     "star group name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
                         .required(),
                 ),
-                random_galaxy_star_group_fieldset(),
+                random_galaxy_star_group_fieldset(None),
             ],
         )
     }
 
-    fn random_galaxy_star_group_fieldset() -> HtmlElement {
+    fn random_galaxy_star_group_fieldset(
+        star_group: Option<(usize, &config::StarGroup)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Stars:",
+            "New star",
+            if let Some((star_group_index, star_group)) = star_group
+                && !star_group.stars().is_empty()
+            {
+                star_group
+                    .stars()
+                    .iter()
+                    .enumerate()
+                    .map(|(star_index, star)| {
+                        html::page::fieldset(
+                            "random-galaxy-star",
+                            format!("{star_group_index}-{star_index}"),
+                            "Star:",
+                            "Remove star",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-star-sprite",
+                                    format!("{star_group_index}-{star_index}"),
+                                    "sprite:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute("value", star.sprite_name().as_str()),
+                                ),
+                                html::page::labeled(
+                                    "random-galaxy-star-habitable",
+                                    format!("{star_group_index}-{star_index}"),
+                                    "habitable zone:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "number")
+                                        .required()
+                                        .with_attributes(vec![
+                                            ("value", *star.habitable()),
+                                            ("min", 0),
+                                        ]),
+                                ),
+                                html::page::labeled(
+                                    "random-galaxy-star-binary-distance",
+                                    format!("{star_group_index}-{star_index}"),
+                                    "distance from other star if in a dual-star system:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "number")
+                                        .required()
+                                        .with_attributes(vec![
+                                            ("value", *star.binary_distance()),
+                                            ("min", 0.0),
+                                        ]),
+                                ),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_star_group_default_star(star_group)]
+            },
+        )
+    }
+
+    fn random_galaxy_star_group_default_star(
+        star_group: Option<(usize, &config::StarGroup)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-star",
+            star_group.map_or_else(String::new, |(star_group_index, _)| {
+                format!("{star_group_index}-0")
+            }),
             "Star:",
-            ("Remove star", "New star"),
+            "Remove star",
             vec![
                 html::page::labeled(
                     "random-galaxy-star-sprite",
+                    star_group.map_or_else(String::new, |(star_group_index, _)| {
+                        format!("{star_group_index}-0")
+                    }),
                     "sprite:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
@@ -1239,51 +1897,148 @@ pub mod page {
                 ),
                 html::page::labeled(
                     "random-galaxy-star-habitable",
+                    star_group.map_or_else(String::new, |(star_group_index, _)| {
+                        format!("{star_group_index}-0")
+                    }),
                     "habitable zone:",
                     HtmlElement::new("input")
                         .with_attribute("type", "number")
-                        .required()
-                        .with_attributes(vec![("value", 1000u32), ("min", 0)]),
+                        .required(),
                 ),
                 html::page::labeled(
                     "random-galaxy-star-binary-distance",
+                    star_group.map_or_else(String::new, |(star_group_index, _)| {
+                        format!("{star_group_index}-0")
+                    }),
                     "distance from other star if in a dual-star system:",
                     HtmlElement::new("input")
                         .with_attribute("type", "number")
-                        .required()
-                        .with_attributes(vec![("value", 160), ("min", 0)]),
+                        .required(),
                 ),
             ],
         )
     }
 
-    fn random_galaxy_planet_groups_fieldset() -> HtmlElement {
+    fn random_galaxy_planet_groups_fieldset(
+        settings: Option<&config::RandomGalaxyConfig>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Planet groups:",
+            "New planet group",
+            if let Some(settings) = settings
+                && !settings.sprites().planets().groups().is_empty()
+            {
+                settings
+                    .sprites()
+                    .planets()
+                    .groups()
+                    .iter()
+                    .enumerate()
+                    .map(|(planet_group_index, planet_group)| {
+                        html::page::fieldset(
+                            "random-galaxy-planet-group",
+                            planet_group_index.to_string(),
+                            "Planet group:",
+                            "Remove planet group",
+                            vec![
+                                html::page::labeled(
+                                    "random-galaxy-planet-group-name",
+                                    planet_group_index.to_string(),
+                                    "planet-group-name:",
+                                    HtmlElement::new("input")
+                                        .with_attribute("type", "text")
+                                        .required()
+                                        .with_attribute(
+                                            "value",
+                                            planet_group.group_name().as_str(),
+                                        ),
+                                ),
+                                random_galaxy_planet_group_fieldset(Some((
+                                    planet_group_index,
+                                    planet_group,
+                                ))),
+                            ],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_default_planet_group()]
+            },
+        )
+    }
+
+    fn random_galaxy_default_planet_group() -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-planet-group",
+            "",
             "Planet group:",
-            ("Remove planet group", "New planet group"),
+            "Remove planet group",
             vec![
                 html::page::labeled(
                     "random-galaxy-planet-group-name",
-                    "planet group name:",
+                    "",
+                    "planet-group-name:",
                     HtmlElement::new("input")
                         .with_attribute("type", "text")
                         .required(),
                 ),
-                random_galaxy_planet_group_fieldset(),
+                random_galaxy_planet_group_fieldset(None),
             ],
         )
     }
 
-    fn random_galaxy_planet_group_fieldset() -> HtmlElement {
+    fn random_galaxy_planet_group_fieldset(
+        planet_group: Option<(usize, &config::PlanetGroup)>,
+    ) -> HtmlElement {
         html::page::fieldset_group(
             "Planets:",
+            "New planet",
+            if let Some((planet_group_index, planet_group)) = planet_group
+                && !planet_group.sprite_names().is_empty()
+            {
+                planet_group
+                    .sprite_names()
+                    .iter()
+                    .enumerate()
+                    .map(|(planet_index, sprite_name)| {
+                        html::page::fieldset(
+                            "random-galaxy-planet",
+                            format!("{planet_group_index}-{planet_index}"),
+                            "Planet:",
+                            "Remove planet",
+                            vec![html::page::labeled(
+                                "random-galaxy-planet-sprite",
+                                format!("{planet_group_index}-{planet_index}"),
+                                "sprite:",
+                                HtmlElement::new("input")
+                                    .with_attribute("type", "text")
+                                    .required()
+                                    .with_attribute("value", sprite_name.as_str()),
+                            )],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![random_galaxy_default_planet(planet_group)]
+            },
+        )
+    }
+
+    fn random_galaxy_default_planet(
+        planet_group: Option<(usize, &config::PlanetGroup)>,
+    ) -> HtmlElement {
+        html::page::fieldset(
             "random-galaxy-planet",
+            planet_group.map_or_else(String::new, |(planet_group_index, _)| {
+                format!("{planet_group_index}-0")
+            }),
             "Planet:",
-            ("Remove planet", "New planet"),
+            "Remove planet",
             vec![html::page::labeled(
                 "random-galaxy-planet-sprite",
+                planet_group.map_or_else(String::new, |(planet_group_index, _)| {
+                    format!("{planet_group_index}-0")
+                }),
                 "sprite:",
                 HtmlElement::new("input")
                     .with_attribute("type", "text")

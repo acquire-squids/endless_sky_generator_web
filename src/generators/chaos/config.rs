@@ -22,7 +22,12 @@ pub mod from_file {
 }
 
 pub mod page {
-    use crate::html::{self, HtmlElement};
+    use crate::{
+        generators::chaos::config,
+        html::{self, HtmlElement},
+    };
+
+    const DEFAULT_CONFIG_FILE: &str = include_str!("../../../config/chaos/default.txt");
 
     #[must_use]
     pub fn chaos() -> HtmlElement {
@@ -53,15 +58,21 @@ pub mod page {
     }
 
     fn chaos_fieldset() -> HtmlElement {
+        let settings = config::from_file::parse(DEFAULT_CONFIG_FILE);
+        let settings = settings.as_ref();
+
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("Chaos Settings:"))
-            .with_element(html::page::labeled(
-                "chaos-seed",
-                "seed:",
-                HtmlElement::new("input")
+            .with_element(html::page::labeled("chaos-seed", "", "seed:", {
+                let input = HtmlElement::new("input")
                     .with_attribute("type", "number")
-                    .required()
-                    .with_attribute("value", 0u32),
-            ))
+                    .required();
+
+                if let Some(settings) = settings {
+                    input.with_attribute("value", *settings.seed())
+                } else {
+                    input
+                }
+            }))
     }
 }

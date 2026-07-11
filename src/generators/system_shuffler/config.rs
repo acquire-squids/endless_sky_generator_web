@@ -30,7 +30,12 @@ pub mod from_file {
 }
 
 pub mod page {
-    use crate::html::{self, HtmlElement};
+    use crate::{
+        generators::system_shuffler::config,
+        html::{self, HtmlElement},
+    };
+
+    const DEFAULT_CONFIG_FILE: &str = include_str!("../../../config/system_shuffler/default.txt");
 
     #[must_use]
     pub fn system_shuffler() -> HtmlElement {
@@ -81,44 +86,70 @@ pub mod page {
     }
 
     fn system_shuffler_fieldset() -> HtmlElement {
+        let settings = config::from_file::parse(DEFAULT_CONFIG_FILE);
+        let settings = settings.as_ref();
+
         HtmlElement::new("fieldset")
             .with_element(HtmlElement::new("legend").with_text("System Shuffler Settings:"))
-            .with_element(html::page::labeled(
-                "system-shuffler-seed",
-                "seed:",
-                HtmlElement::new("input")
+            .with_element(html::page::labeled("system-shuffler-seed", "", "seed:", {
+                let input = HtmlElement::new("input")
                     .with_attribute("type", "number")
-                    .required()
-                    .with_attribute("value", 0u32),
-            ))
+                    .required();
+
+                if let Some(settings) = settings {
+                    input.with_attribute("value", *settings.seed())
+                } else {
+                    input
+                }
+            }))
             .with_element(html::page::labeled(
                 "system-shuffler-max-presets",
+                "",
                 "max presets:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "number")
-                    .required()
-                    .with_attribute("min", 1u32)
-                    .with_attribute("max", 255u32),
+                {
+                    let input = HtmlElement::new("input")
+                        .with_attribute("type", "number")
+                        .required()
+                        .with_attribute("min", 1u32)
+                        .with_attribute("max", 255u32);
+
+                    if let Some(settings) = settings {
+                        input.with_attribute("value", *settings.max_presets())
+                    } else {
+                        input
+                    }
+                },
             ))
             .with_element(html::page::labeled(
                 "system-shuffler-shuffle-once-on-install",
+                "",
                 "shuffle once upon installation:",
-                HtmlElement::new("input")
-                    .with_attribute("type", "checkbox")
-                    .checked(),
+                {
+                    let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                    if let Some(settings) = settings
+                        && *settings.shuffle_once_on_install()
+                    {
+                        input.checked()
+                    } else {
+                        input
+                    }
+                },
             ))
             .with_element(html::page::labeled_range(
                 "system-shuffler-shuffle-chance",
+                "",
                 "chance to shuffle every time you land:",
-                0u32,
-                (0u32, 100u32),
+                settings.map_or(0u8, |settings| *settings.shuffle_chance()),
+                (0u8, 100u8),
                 false,
             ))
             .with_element(html::page::labeled_range(
                 "system-shuffler-fixed-shuffle-days",
+                "",
                 "shuffle every N days (0 to disable):",
-                0u32,
-                (0u32, 255u32),
+                settings.map_or(0u8, |settings| *settings.fixed_shuffle_days()),
+                (0u8, 255u8),
                 false,
             ))
     }

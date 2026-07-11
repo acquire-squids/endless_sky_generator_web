@@ -44,6 +44,9 @@ impl AttributeValue for i32 {}
 impl AttributeValue for i64 {}
 impl AttributeValue for i128 {}
 
+impl AttributeValue for usize {}
+impl AttributeValue for isize {}
+
 impl AttributeValue for f32 {}
 impl AttributeValue for f64 {}
 
@@ -57,7 +60,7 @@ impl AttributeValue for String {
 
 impl fmt::Display for HtmlPage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<!doctype html>\n{}", self.html)
+        write!(f, "<!doctype html>{}", self.html)
     }
 }
 
@@ -279,7 +282,7 @@ pub mod page {
         system_shuffler::config::page as system_shuffler_form,
     };
 
-    use super::{AttributeValue, Html, HtmlElement, HtmlPage};
+    use super::{AttributeValue, Html, HtmlAttribute, HtmlElement, HtmlPage};
 
     const PAGE_NAME: &str = "Squiddy's Endless Sky Plugins Generator";
 
@@ -329,15 +332,18 @@ pub mod page {
     }
 
     #[must_use]
-    pub fn weight<WeightIsFor>(
-        weight_is_for: WeightIsFor,
+    pub fn weight<ClassName, AppendToId>(
+        class_name: ClassName,
+        append_to_id: AppendToId,
         default_weight: Option<u32>,
     ) -> HtmlElement
     where
-        WeightIsFor: AsRef<str>,
+        ClassName: AsRef<str>,
+        AppendToId: AsRef<str>,
     {
         labeled(
-            weight_is_for.as_ref(),
+            class_name,
+            append_to_id,
             "weight:",
             HtmlElement::new("input")
                 .with_attribute("type", "number")
@@ -347,53 +353,73 @@ pub mod page {
     }
 
     #[must_use]
-    pub fn labeled<LabelIsFor, Label>(
-        label_is_for: LabelIsFor,
+    pub fn labeled<ClassName, AppendToId, Label>(
+        class_name: ClassName,
+        append_to_id: AppendToId,
         label: Label,
         element: HtmlElement,
     ) -> HtmlElement
     where
-        LabelIsFor: AsRef<str>,
+        ClassName: AsRef<str>,
+        AppendToId: AsRef<str>,
         Label: AsRef<str>,
     {
+        let id = if append_to_id.as_ref().is_empty() {
+            class_name.as_ref().to_string()
+        } else {
+            format!("{}-{}", class_name.as_ref(), append_to_id.as_ref())
+        };
+
+        let id = id.as_str();
+
         HtmlElement::new("div")
             .with_element(
                 HtmlElement::new("label")
-                    .with_attribute("for", label_is_for.as_ref())
+                    .with_attribute("for", id)
                     .with_text(format!("{} ", label.as_ref())),
             )
             .with_element(
                 element
-                    .with_class(label_is_for.as_ref())
-                    .with_name(label_is_for.as_ref())
-                    .with_id(label_is_for.as_ref()),
+                    .with_class(class_name.as_ref())
+                    .with_name(id)
+                    .with_id(id),
             )
     }
 
     #[must_use]
-    pub fn labeled_range<LabelIsFor, Label, Value>(
-        label_is_for: LabelIsFor,
+    pub fn labeled_range<ClassName, AppendToId, Label, Value>(
+        class_name: ClassName,
+        append_to_id: AppendToId,
         label: Label,
         value: Value,
         (min, max): (Value, Value),
         any_step: bool,
     ) -> HtmlElement
     where
-        LabelIsFor: AsRef<str>,
+        ClassName: AsRef<str>,
+        AppendToId: AsRef<str>,
         Label: AsRef<str>,
         Value: AttributeValue,
     {
+        let id = if append_to_id.as_ref().is_empty() {
+            class_name.as_ref().to_string()
+        } else {
+            format!("{}-{}", class_name.as_ref(), append_to_id.as_ref())
+        };
+
+        let id = id.as_str();
+
         HtmlElement::new("div")
             .with_element(
                 HtmlElement::new("label")
-                    .with_attribute("for", label_is_for.as_ref())
+                    .with_attribute("for", id)
                     .with_text(format!("{} ", label.as_ref())),
             )
             .with_element(
                 HtmlElement::new("input")
-                    .with_class(format!("paired-range {}", label_is_for.as_ref()))
-                    .with_name(label_is_for.as_ref())
-                    .with_id(label_is_for.as_ref())
+                    .with_class(format!("paired-range {}", class_name.as_ref()))
+                    .with_name(id)
+                    .with_id(id)
                     .with_attribute("type", "range")
                     .with_attributes(vec![
                         ("value", value.clone()),
@@ -404,9 +430,9 @@ pub mod page {
             )
             .with_element({
                 let input = HtmlElement::new("input")
-                    .with_class(format!("paired-range-output {}", label_is_for.as_ref()))
-                    .with_name(format!("{}-output", label_is_for.as_ref()))
-                    .with_id(format!("{}-output", label_is_for.as_ref()))
+                    .with_class(format!("paired-range-output {}", class_name.as_ref()))
+                    .with_name(format!("{id}-output"))
+                    .with_id(format!("{id}-output"))
                     .with_attribute("type", "number")
                     .with_attributes(vec![("value", value), ("min", min), ("max", max)])
                     .required();
@@ -420,25 +446,35 @@ pub mod page {
     }
 
     #[must_use]
-    pub fn labeled_min_max<LabelIsFor, Label, Value>(
-        (label_is_for_min, label_is_for_max): (LabelIsFor, LabelIsFor),
+    pub fn labeled_min_max<ClassName, AppendToId, Label, Value>(
+        (class_name_min, class_name_max): (ClassName, ClassName),
+        (append_to_id_min, append_to_id_max): (AppendToId, AppendToId),
         label: Label,
         (default_min, default_max): (Value, Value),
         (min, max): (Value, Value),
         any_step: bool,
     ) -> HtmlElement
     where
-        LabelIsFor: AsRef<str>,
+        ClassName: AsRef<str>,
+        AppendToId: AsRef<str>,
         Label: AsRef<str>,
         Value: AttributeValue,
     {
         HtmlElement::new("label")
             .with_text(format!("{} ", label.as_ref()))
             .with_element({
+                let id = if append_to_id_min.as_ref().is_empty() {
+                    class_name_min.as_ref().to_string()
+                } else {
+                    format!("{}-{}", class_name_min.as_ref(), append_to_id_min.as_ref())
+                };
+
+                let id = id.as_str();
+
                 let input = HtmlElement::new("input")
-                    .with_class(label_is_for_min.as_ref())
-                    .with_name(label_is_for_min.as_ref())
-                    .with_id(label_is_for_min.as_ref())
+                    .with_class(class_name_min.as_ref())
+                    .with_name(id)
+                    .with_id(id)
                     .with_attribute("type", "number")
                     .with_attributes(vec![
                         ("value", default_min),
@@ -454,10 +490,18 @@ pub mod page {
                 }
             })
             .with_element({
+                let id = if append_to_id_max.as_ref().is_empty() {
+                    class_name_max.as_ref().to_string()
+                } else {
+                    format!("{}-{}", class_name_max.as_ref(), append_to_id_min.as_ref())
+                };
+
+                let id = id.as_str();
+
                 let input = HtmlElement::new("input")
-                    .with_class(label_is_for_max.as_ref())
-                    .with_name(label_is_for_max.as_ref())
-                    .with_id(label_is_for_max.as_ref())
+                    .with_class(class_name_max.as_ref())
+                    .with_name(id)
+                    .with_id(id)
                     .with_attribute("type", "number")
                     .with_attributes(vec![("value", default_max), ("min", min), ("max", max)])
                     .required();
@@ -470,56 +514,117 @@ pub mod page {
             })
     }
 
-    #[must_use]
-    pub fn fieldset_group<Legend, Id, ItemLabel, RemoveLabel, NewLabel>(
+    pub fn fieldset_group<Legend, NewLabel>(
         legend: Legend,
-        id: Id,
-        item_label: ItemLabel,
-        (remove_text, new_text): (RemoveLabel, NewLabel),
-        fields: Vec<HtmlElement>,
+        new_text: NewLabel,
+        population: Vec<HtmlElement>,
     ) -> HtmlElement
     where
         Legend: AsRef<str>,
-        Id: AsRef<str>,
-        ItemLabel: AsRef<str>,
-        RemoveLabel: AsRef<str>,
         NewLabel: AsRef<str>,
     {
         HtmlElement::new("details")
-            .open()
             .with_element(HtmlElement::new("summary").with_text(format!("{} ", legend.as_ref())))
-            .with_element(
-                HtmlElement::new("fieldset")
-                    .with_element({
-                        let mut fieldset = HtmlElement::new("fieldset").with_element(
-                            HtmlElement::new("button")
-                                .with_class("click-to-remove")
-                                .with_attribute("type", "button")
-                                .with_text(remove_text.as_ref())
-                                .with_attribute("data-commandfor", id.as_ref()),
-                        );
+            .with_element({
+                let mut group = HtmlElement::new("fieldset");
 
-                        for field in fields {
-                            fieldset = fieldset.with_element(field);
+                for field_set in population {
+                    group = group.with_element(field_set);
+                }
+
+                if let Some(id) = group
+                    .children
+                    .iter()
+                    .filter_map(|child| {
+                        if let Html::Element(element) = child {
+                            Some(element)
+                        } else {
+                            None
                         }
-
-                        HtmlElement::new("details")
-                            .with_class(format!("can-be-created can-be-removed {}", id.as_ref()))
-                            .with_name(id.as_ref())
-                            .with_id(id.as_ref())
-                            .with_element(
-                                HtmlElement::new("summary").with_text(item_label.as_ref()),
-                            )
-                            .with_element(fieldset)
                     })
-                    .with_element(
+                    .filter(|element| {
+                        element.attributes.iter().any(|attribute| {
+                            if let HtmlAttribute::KeyValuePair { key, value } = attribute
+                                && key == "class"
+                                && value
+                                    .trim_matches('"')
+                                    .split_whitespace()
+                                    .any(|class_name| class_name == "can-be-created")
+                            {
+                                true
+                            } else {
+                                false
+                            }
+                        })
+                    })
+                    .find_map(|element| {
+                        element.attributes.iter().find_map(|attribute| {
+                            if let HtmlAttribute::KeyValuePair { key, value } = attribute
+                                && key == "id"
+                            {
+                                Some(value.trim_matches('"').to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                {
+                    group.with_element(
                         HtmlElement::new("button")
                             .with_class("click-to-create")
                             .with_attribute("type", "button")
                             .with_text(new_text.as_ref())
-                            .with_attribute("data-commandfor", id.as_ref()),
-                    ),
-            )
+                            .with_attribute("data-commandfor", id),
+                    )
+                } else {
+                    group
+                }
+            })
+    }
+
+    #[must_use]
+    pub fn fieldset<ClassName, AppendToId, ItemLabel, RemoveLabel>(
+        class_name: ClassName,
+        append_to_id: AppendToId,
+        item_label: ItemLabel,
+        remove_text: RemoveLabel,
+        fields: Vec<HtmlElement>,
+    ) -> HtmlElement
+    where
+        ClassName: AsRef<str>,
+        AppendToId: AsRef<str>,
+        ItemLabel: AsRef<str>,
+        RemoveLabel: AsRef<str>,
+    {
+        let id = if append_to_id.as_ref().is_empty() {
+            class_name.as_ref().to_string()
+        } else {
+            format!("{}-{}", class_name.as_ref(), append_to_id.as_ref())
+        };
+
+        let id = id.as_str();
+
+        let mut fieldset = HtmlElement::new("fieldset").with_element(
+            HtmlElement::new("button")
+                .with_class("click-to-remove")
+                .with_attribute("type", "button")
+                .with_text(remove_text.as_ref())
+                .with_attribute("data-commandfor", id),
+        );
+
+        for field in fields {
+            fieldset = fieldset.with_element(field);
+        }
+
+        HtmlElement::new("details")
+            .with_class(format!(
+                "can-be-created can-be-removed {}",
+                class_name.as_ref()
+            ))
+            .with_name(id)
+            .with_id(id)
+            .with_element(HtmlElement::new("summary").with_text(item_label.as_ref()))
+            .with_element(fieldset)
     }
 
     fn body() -> HtmlElement {
@@ -571,6 +676,7 @@ pub mod page {
             .with_element(
                 labeled(
                     "include-defaults",
+                    "",
                     "Include data from stable release:",
                     HtmlElement::new("input")
                         .with_attribute("type", "checkbox")
@@ -580,6 +686,7 @@ pub mod page {
             .with_element(
                 labeled(
                     "input",
+                    "",
                     "Upload your own data folder:",
                     HtmlElement::new("input")
                         .with_attribute("type", "file")
