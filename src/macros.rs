@@ -3,7 +3,7 @@ macro_rules! __wasm_newtype {
     (
         $(using $($want:path $(, $wants:path)* $(,)? )? ;)?
         in $mod_name:ident =>
-        $(#[derive($derive:ident $(, $derives:ident)*)])?
+        $(#[$attribute:meta $(, $attributes:meta)* $(,)?])?
         $v:vis $name:ident ;
         $($fv:vis $field:ident : $field_ty:ty $(=> $field_map:expr)?,)+
     ) => {
@@ -19,7 +19,7 @@ macro_rules! __wasm_newtype {
             use wasm_bindgen::prelude::*;
 
             #[cfg_attr(all(target_family = "wasm", target_os = "unknown"), wasm_bindgen)]
-            $(#[derive($derive $(, $derives)*)])?
+            $(#[$attribute $(, $attributes)*])?
             $v struct $name {
                 $($fv $field: $field_ty,)+
             }
