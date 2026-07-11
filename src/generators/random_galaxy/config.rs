@@ -882,3 +882,413 @@ pub mod from_file {
         )
     }
 }
+
+pub mod page {
+    use crate::html::{self, HtmlElement};
+
+    #[must_use]
+    pub fn random_galaxy() -> HtmlElement {
+        HtmlElement::new("form")
+            .with_name("random-galaxy-form")
+            .with_id("random-galaxy-form")
+            .novalidate()
+            .with_element(
+                HtmlElement::new("h2")
+                    .with_element(html::page::anchor("Random_Galaxy", "Random Galaxy")),
+            )
+            .with_element(
+                HtmlElement::new("p")
+                    .with_text("Generates a random galaxy with the given parameters.<br/>")
+                    .with_text(
+                        "Nothing too interesting when it comes to content, and no story.<br/>",
+                    )
+                    .with_text("But it can be fun?<br/>"),
+            )
+            .with_element(random_galaxy_fieldset())
+            .with_element(
+                HtmlElement::new("button")
+                    .with_id("random-galaxy-output")
+                    .with_attribute("type", "submit")
+                    .with_text("Generate and download"),
+            )
+    }
+
+    fn random_galaxy_fieldset() -> HtmlElement {
+        HtmlElement::new("fieldset")
+            .with_element(HtmlElement::new("legend").with_text("Random Galaxy Settings:"))
+            .with_element(html::page::labeled(
+                "random-galaxy-name",
+                "galaxy name:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "text")
+                    .required(),
+            ))
+            .with_element(html::page::labeled(
+                "random-galaxy-sprite",
+                "galaxy sprite:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "file")
+                    .with_attribute("accept", "image/*")
+                    .required(),
+            ))
+            .with_element(html::page::labeled(
+                "random-galaxy-seed",
+                "seed:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "number")
+                    .required()
+                    .with_attribute("value", 0u32),
+            ))
+            .with_element(html::page::labeled(
+                "random-galaxy-reveal-all",
+                "reveal all systems:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "checkbox")
+                    .checked(),
+            ))
+            .with_element(random_galaxy_clusters_fieldset())
+            .with_element(random_galaxy_system_name_sources_fieldset())
+            .with_element(random_galaxy_star_groups_fieldset())
+            .with_element(random_galaxy_planet_groups_fieldset())
+    }
+
+    fn random_galaxy_clusters_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "System Clusters:",
+            "random-galaxy-cluster",
+            "System Cluster:",
+            ("Remove system cluster", "New system cluster"),
+            vec![
+                random_galaxy_cluster_capacity_fieldset(),
+                random_galaxy_cluster_placement_fieldset(),
+                random_galaxy_cluster_system_names_fieldset(),
+                random_galaxy_cluster_star_groups_fieldset(),
+                random_galaxy_cluster_planet_groups_fieldset(),
+            ],
+        )
+    }
+
+    fn random_galaxy_cluster_capacity_fieldset() -> HtmlElement {
+        HtmlElement::new("fieldset")
+            .with_element(HtmlElement::new("legend").with_text("System Cluster Capacity:"))
+            .with_div(html::page::labeled_min_max(
+                (
+                    "random-galaxy-cluster-width",
+                    "random-galaxy-cluster-height",
+                ),
+                "cluster size:",
+                (1024u32, 1024u32),
+                (100u32, 16384u32),
+                false,
+            ))
+            .with_element(html::page::labeled(
+                "random-galaxy-cluster-system-count",
+                "maximum systems (may generate less):",
+                HtmlElement::new("input")
+                    .with_attribute("type", "number")
+                    .required()
+                    .with_attribute("min", 1u32),
+            ))
+    }
+
+    fn random_galaxy_cluster_placement_fieldset() -> HtmlElement {
+        HtmlElement::new("fieldset")
+            .with_element(HtmlElement::new("legend").with_text("System Cluster Placement:"))
+            .with_div(
+                HtmlElement::new("label")
+                    .with_text("origin point: ")
+                    .with_element(
+                        HtmlElement::new("input")
+                            .with_class("random-galaxy-cluster-origin-x")
+                            .with_name("random-galaxy-cluster-origin-x")
+                            .with_id("random-galaxy-cluster-origin-x")
+                            .with_attribute("type", "number")
+                            .required(),
+                    )
+                    .with_element(
+                        HtmlElement::new("input")
+                            .with_class("random-galaxy-cluster-origin-y")
+                            .with_name("random-galaxy-cluster-origin-y")
+                            .with_id("random-galaxy-cluster-origin-y")
+                            .with_attribute("type", "number")
+                            .required(),
+                    ),
+            )
+            .with_element(html::page::labeled(
+                "random-galaxy-cluster-wormhole",
+                "place the wormhole to the cluster in this system:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "text")
+                    .required(),
+            ))
+            .with_element(html::page::labeled_range(
+                "random-galaxy-cluster-max-link-length",
+                "maximum hyperspace link length:",
+                100u32,
+                (40u32, 255u32),
+                false,
+            ))
+            .with_element(html::page::labeled_range(
+                "random-galaxy-cluster-link-chance",
+                "chance for other systems to link:",
+                40u32,
+                (0u32, 100u32),
+                false,
+            ))
+            .with_element(html::page::labeled_range(
+                "random-galaxy-cluster-minimum-distance",
+                "prevent systems within this distance of each other:",
+                33.3,
+                (16.0, 50.0),
+                true,
+            ))
+            .with_div(html::page::labeled_min_max(
+                (
+                    "random-galaxy-cluster-step-size-min",
+                    "random-galaxy-cluster-step-size-max",
+                ),
+                "systems are placed within this range of each other:",
+                (50.0, 87.5),
+                (20.0, 100.0),
+                true,
+            ))
+    }
+
+    fn random_galaxy_cluster_system_names_fieldset() -> HtmlElement {
+        HtmlElement::new("fieldset")
+            .with_element(HtmlElement::new("legend").with_text("System Cluster System Names:"))
+            .with_element(html::page::labeled_range(
+                "random-galaxy-cluster-max-system-name-length",
+                "maximum system name length:",
+                64u32,
+                (16u32, 255u32),
+                false,
+            ))
+            .with_element(html::page::labeled(
+                "random-galaxy-cluster-system-names-examples-group",
+                "example name group to use as a Markov chain:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "text")
+                    .required(),
+            ))
+    }
+
+    fn random_galaxy_cluster_star_groups_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "System Cluster Star Groups:",
+            "random-galaxy-cluster-star-group",
+            "System Cluster Star Group:",
+            (
+                "Remove system cluster star group",
+                "New system cluster star group",
+            ),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-cluster-star-group-name",
+                    "star group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                html::page::labeled(
+                    "random-galaxy-cluster-star-group-can-be-binary",
+                    "can be part of a dual-star system:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "checkbox")
+                        .checked(),
+                ),
+                html::page::weight("random-galaxy-cluster-star-group-weight", None),
+                html::page::labeled(
+                    "random-galaxy-cluster-star-group-max-planets",
+                    "maximum planets in its system:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "number")
+                        .required()
+                        .with_attributes(vec![("value", 5u32), ("min", 0u32), ("max", 255u32)]),
+                ),
+            ],
+        )
+    }
+
+    fn random_galaxy_cluster_planet_groups_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "System Cluster Planet Groups:",
+            "random-galaxy-cluster-planet-group",
+            "System Cluster Planet Group:",
+            (
+                "Remove system cluster planet group",
+                "New system cluster planet group",
+            ),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-cluster-planet-group-name",
+                    "planet group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                html::page::weight("random-galaxy-cluster-planet-group-weight", None),
+                html::page::labeled_min_max(
+                    (
+                        "random-galaxy-cluster-planet-group-distance-range-percentage-min",
+                        "random-galaxy-cluster-planet-group-distance-range-percentage-max",
+                    ),
+                    "spawns within this percentage range of 2x the habitable zone:",
+                    (50.0, 65.0),
+                    (0.0, 100.0),
+                    true,
+                ),
+                html::page::labeled_range(
+                    "random-galaxy-cluster-planet-moon-chance",
+                    "Chance to have a moon:",
+                    12.5,
+                    (0.0, 100.0),
+                    false,
+                ),
+                random_galaxy_cluster_planet_moons_fieldset(),
+            ],
+        )
+    }
+
+    fn random_galaxy_cluster_planet_moons_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Planet groups as moons:",
+            "random-galaxy-cluster-planet-moon-group",
+            "Planet groups as moon:",
+            ("Remove moon", "New moon"),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-cluster-planet-moon-group-name",
+                    "planet group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                html::page::weight("random-galaxy-cluster-planet-moon-weight", None),
+            ],
+        )
+    }
+
+    fn random_galaxy_system_name_sources_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Example name groups:",
+            "random-galaxy-system-name-examples-group",
+            "Example name group:",
+            ("Remove example name group", "New example name group"),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-system-name-examples-group-name",
+                    "example name group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                random_galaxy_system_name_source_fieldset(),
+            ],
+        )
+    }
+
+    fn random_galaxy_system_name_source_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Example names for systems to use via Markov chain:",
+            "random-galaxy-system-name-examples",
+            "Example name:",
+            ("Remove example name", "New example name"),
+            vec![html::page::labeled(
+                "random-galaxy-system-name-example",
+                "name:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "text")
+                    .required(),
+            )],
+        )
+    }
+
+    fn random_galaxy_star_groups_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Star groups:",
+            "random-galaxy-star-group",
+            "Star group:",
+            ("Remove star group", "New star group"),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-star-group-name",
+                    "star group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                random_galaxy_star_group_fieldset(),
+            ],
+        )
+    }
+
+    fn random_galaxy_star_group_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Stars:",
+            "random-galaxy-star",
+            "Star:",
+            ("Remove star", "New star"),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-star-sprite",
+                    "sprite:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                html::page::labeled(
+                    "random-galaxy-star-habitable",
+                    "habitable zone:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "number")
+                        .required()
+                        .with_attributes(vec![("value", 1000u32), ("min", 0)]),
+                ),
+                html::page::labeled(
+                    "random-galaxy-star-binary-distance",
+                    "distance from other star if in a dual-star system:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "number")
+                        .required()
+                        .with_attributes(vec![("value", 160), ("min", 0)]),
+                ),
+            ],
+        )
+    }
+
+    fn random_galaxy_planet_groups_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Planet groups:",
+            "random-galaxy-planet-group",
+            "Planet group:",
+            ("Remove planet group", "New planet group"),
+            vec![
+                html::page::labeled(
+                    "random-galaxy-planet-group-name",
+                    "planet group name:",
+                    HtmlElement::new("input")
+                        .with_attribute("type", "text")
+                        .required(),
+                ),
+                random_galaxy_planet_group_fieldset(),
+            ],
+        )
+    }
+
+    fn random_galaxy_planet_group_fieldset() -> HtmlElement {
+        html::page::fieldset_group(
+            "Planets:",
+            "random-galaxy-planet",
+            "Planet:",
+            ("Remove planet", "New planet"),
+            vec![html::page::labeled(
+                "random-galaxy-planet-sprite",
+                "sprite:",
+                HtmlElement::new("input")
+                    .with_attribute("type", "text")
+                    .required(),
+            )],
+        )
+    }
+}

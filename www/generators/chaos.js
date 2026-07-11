@@ -1,7 +1,9 @@
 import {
-  generateAndDownload,
   getPathsAndSources,
-  downloadZip
+  downloadZip,
+  generateAndDownload,
+  iterateElements,
+  defaultEventListeners
 } from "../export_to_rust.js";
 
 import {
@@ -10,15 +12,19 @@ import {
 } from "../endless_sky_generator_web.js";
 
 export const preparation = () => {
-  const form = document.getElementById("chaos-form");
+  const chaos_form = document.getElementById("chaos-form");
 
-  const seed = document.getElementById("chaos-seed");
+  iterateElements(chaos_form, (node) => {
+    defaultEventListeners(node);
+  });
 
-  form.addEventListener("submit", async (event) => {
+  const seed = Array.from(chaos_form.getElementsByClassName("chaos-seed"))[0];
+
+  chaos_form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    if (!form.checkValidity()) {
-      form.reportValidity();
+    if (!chaos_form.checkValidity()) {
+      chaos_form.reportValidity();
       return;
     }
 

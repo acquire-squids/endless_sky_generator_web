@@ -1,3 +1,5 @@
+pub mod config;
+
 use crate::{
     generators,
     wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex},
@@ -19,15 +21,6 @@ const PLUGIN_DESCRIPTION: &str = "\
 ";
 
 const PLUGIN_VERSION: &str = "0.1.0";
-
-pub mod config {
-    crate::macros::wasm_newtype! {
-        in main =>
-        #[derive(Debug)]
-        pub ChaosConfig;
-        pub seed: u64,
-    }
-}
 
 #[allow(clippy::missing_errors_doc)]
 pub fn process_data(

@@ -1,3 +1,5 @@
+pub mod config;
+
 use crate::{generators, zippy::Zip};
 
 use endless_sky_rw::{

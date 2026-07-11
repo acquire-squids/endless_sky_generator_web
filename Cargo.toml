@@ -36,3 +36,6 @@ name = "chaos"
 
 [[bin]]
 name = "random_galaxy"
+
+[[bin]]
+name = "page_generator"

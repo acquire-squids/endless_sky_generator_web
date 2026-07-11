@@ -4,10 +4,7 @@ cfg_select! {
     }
     _ => {
         fn main() -> std::process::ExitCode {
-            use endless_sky_generator_web::{
-                config::{self, Value},
-                generators::chaos::{self, config::ChaosConfig},
-            };
+            use endless_sky_generator_web::generators::chaos;
 
             const FILE_NAME: &str = "chaos.zip";
             const OUTPUT_FOLDER: &str = "output";
@@ -30,10 +27,7 @@ cfg_select! {
                 } else {
                     match fs::read_to_string(path) {
                         Ok(source) => {
-                            let Some(settings) = config::parse_config!(
-                                source.as_str() => ChaosConfig;
-                                seed => { int of u64 => seed }
-                            ) else {
+                            let Some(settings) = chaos::config::from_file::parse(source.as_str()) else {
                                 return ExitCode::FAILURE;
                             };
 

@@ -1,3 +1,5 @@
+pub mod config;
+
 use crate::{
     generators,
     wandom::{XoShiRo256SS, shuffle_index::ShuffleIndex},
@@ -26,19 +28,6 @@ const LAST_SHUFFLE_DAY: &str = "System Shuffler: Last Shuffle Day";
 
 const RESTORE_PREFIX: &str = "System Shuffler: Restore Preset";
 const ACTIVATE_PREFIX: &str = "System Shuffler: Activate Preset";
-
-pub mod config {
-    crate::macros::wasm_newtype! {
-        in main =>
-        #[derive(Debug)]
-        pub SystemShufflerConfig ;
-        seed: u64,
-        max_presets: u8,
-        shuffle_chance: u8,
-        fixed_shuffle_days: u8,
-        shuffle_once_on_install: bool,
-    }
-}
 
 struct SystemShuffler<'a> {
     archive: Zip<'a>,

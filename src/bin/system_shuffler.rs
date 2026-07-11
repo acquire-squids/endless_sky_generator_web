@@ -4,10 +4,7 @@ cfg_select! {
     }
     _ => {
         fn main() -> std::process::ExitCode {
-            use endless_sky_generator_web::{
-                config::{self, Value},
-                generators::system_shuffler::{self, config::SystemShufflerConfig},
-            };
+            use endless_sky_generator_web::generators::system_shuffler;
 
             const FILE_NAME: &str = "system_shuffler.zip";
             const OUTPUT_FOLDER: &str = "output";
@@ -30,14 +27,7 @@ cfg_select! {
                 } else {
                     match fs::read_to_string(path) {
                         Ok(source) => {
-                            let Some(settings) = config::parse_config!(
-                                source.as_str() => SystemShufflerConfig;
-                                seed => { int of u64 => seed }
-                                max_presets => { int of u8 => max_presets }
-                                shuffle_chance => { int of u8 where shuffle_chance <= 100 => shuffle_chance }
-                                fixed_shuffle_days => { int of u8 => fixed_shuffle_days }
-                                shuffle_once_on_install => { bool => *shuffle_once_on_install }
-                            ) else {
+                            let Some(settings) = system_shuffler::config::from_file::parse(source.as_str()) else {
                                 return ExitCode::FAILURE;
                             };
 

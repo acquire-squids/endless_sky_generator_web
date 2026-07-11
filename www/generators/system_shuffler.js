@@ -1,7 +1,9 @@
 import {
   getPathsAndSources,
   downloadZip,
-  generateAndDownload
+  generateAndDownload,
+  iterateElements,
+  defaultEventListeners
 } from "../export_to_rust.js";
 
 import {
@@ -10,37 +12,27 @@ import {
 } from "../endless_sky_generator_web.js";
 
 export const preparation = () => {
-  const form = document.getElementById("system-shuffler-form");
+  const system_shuffler_form = document.getElementById("system-shuffler-form");
 
-  const seed = document.getElementById("system-shuffler-seed");
-  const max_presets = document.getElementById("system-shuffler-max-presets");
-  const shuffle_once_on_install = document.getElementById("system-shuffler-shuffle-once-on-install");
+  iterateElements(system_shuffler_form, (node) => {
+    defaultEventListeners(node);
+  });
 
-  const shuffle_chance = document.getElementById("system-shuffler-shuffle-chance");
-  const shuffle_chance_output = document.getElementById("system-shuffler-shuffle-chance-output");
+  const seed = Array.from(system_shuffler_form.getElementsByClassName("system-shuffler-seed"))[0];
 
-  const share_value = (source, target) => {
-    source.addEventListener("input", () => {
-      if (source.checkValidity()) {
-        target.value = source.value;
-      }
-    });
-  };
+  const max_presets = Array.from(system_shuffler_form.getElementsByClassName("system-shuffler-max-presets"))[0];
 
-  share_value(shuffle_chance, shuffle_chance_output);
-  share_value(shuffle_chance_output, shuffle_chance);
+  const shuffle_once_on_install = Array.from(system_shuffler_form.getElementsByClassName("system-shuffler-shuffle-once-on-install"))[0];
 
-  const fixed_shuffle_days = document.getElementById("system-shuffler-fixed-shuffle-days");
-  const fixed_shuffle_days_output = document.getElementById("system-shuffler-fixed-shuffle-days-output");
+  const shuffle_chance = Array.from(system_shuffler_form.getElementsByClassName("system-shuffler-shuffle-chance"))[0];
 
-  share_value(fixed_shuffle_days, fixed_shuffle_days_output);
-  share_value(fixed_shuffle_days_output, fixed_shuffle_days);
+  const fixed_shuffle_days = Array.from(system_shuffler_form.getElementsByClassName("system-shuffler-fixed-shuffle-days"))[0];
 
-  form.addEventListener("submit", async (event) => {
+  system_shuffler_form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    if (!form.checkValidity()) {
-      form.reportValidity();
+    if (!system_shuffler_form.checkValidity()) {
+      system_shuffler_form.reportValidity();
       return;
     }
 
@@ -56,8 +48,8 @@ export const preparation = () => {
           new SystemShufflerConfig(
             seed.value,
             max_presets.value,
-            shuffle_chance_output.value,
-            fixed_shuffle_days_output.value,
+            shuffle_chance.value,
+            fixed_shuffle_days.value,
             shuffle_once_on_install.checked,
           )
         )

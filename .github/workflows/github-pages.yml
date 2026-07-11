@@ -59,6 +59,12 @@ jobs:
         id: build
         run: |
           cargo build --target wasm32-unknown-unknown --release --lib
+
+      - name: Make page
+        id: mage_page
+        run: |
+          cargo run --target host-tuple --release --bin page_generator
+          mv output/index.html www/index.html
       
       - name: Run wasm-bindgen
         id: bind

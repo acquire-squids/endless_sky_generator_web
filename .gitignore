@@ -7,6 +7,7 @@
 /www/es_stable_data
 /www/es_stable_data_paths.txt
 /output
+/www/index.html
 
 # Allow configurations for the binaries
 /config/**

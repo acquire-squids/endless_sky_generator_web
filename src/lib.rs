@@ -1,5 +1,6 @@
 pub mod config;
 pub mod generators;
+pub mod html;
 mod macros;
 mod markov;
 mod wandom;
