@@ -1,5 +1,4 @@
-use crate::generators;
-use crate::zippy::Zip;
+use crate::{generators, zippy::Zip};
 
 use endless_sky_rw::{
     Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
