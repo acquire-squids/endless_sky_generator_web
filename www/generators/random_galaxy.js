@@ -186,6 +186,8 @@ export const preparation = () => {
 
     if (sprite_name === undefined || sprite_bytes === undefined) {
       sprite.setCustomValidity("You never chose a galaxy sprite!");
+    } else {
+      sprite.setCustomValidity("");
     }
 
     const star_groups = collect_star_groups();
