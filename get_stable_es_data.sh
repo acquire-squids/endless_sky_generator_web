@@ -17,6 +17,7 @@ git checkout
 
 cp -r data/ ../www/es_stable_data/
 
-rustc -o "../list_stable_data_paths" "../list_stable_data_paths.rs"
-
-../list_stable_data_paths
+cargo run \
+  --target host-tuple \
+  --release \
+  --bin list_stable_data_paths

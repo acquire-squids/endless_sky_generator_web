@@ -6,12 +6,12 @@ use std::{
 };
 
 fn main() -> ExitCode {
-    let data_path = ["..", "www", "es_stable_data"].iter().collect::<PathBuf>();
+    let data_path = ["www", "es_stable_data"].iter().collect::<PathBuf>();
 
-    let deprecated_path = PathBuf::from(data_path.as_path().join("_deprecated"));
+    let deprecated_path = data_path.as_path().join("_deprecated");
     let deprecated_path = deprecated_path.as_path();
 
-    let output = ["..", "www", "es_stable_data_paths.txt"]
+    let output = ["www", "es_stable_data_paths.txt"]
         .iter()
         .collect::<PathBuf>();
 
@@ -29,7 +29,7 @@ fn main() -> ExitCode {
                 .fold(OsString::new(), |mut accum, path| {
                     accum.push(
                         path.components()
-                            .skip(2)
+                            .skip(1)
                             .collect::<PathBuf>()
                             .as_mut_os_string(),
                     );
@@ -40,7 +40,7 @@ fn main() -> ExitCode {
                 });
 
             match fs::write(output, list_as_text.into_encoded_bytes()) {
-                Ok(_) => ExitCode::SUCCESS,
+                Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("{error}");
                     ExitCode::FAILURE
@@ -68,23 +68,26 @@ where
         } else if file_path.is_dir() {
             let mut all_success = true;
 
-            if let Ok(dir) = fs::read_dir(&file_path) {
-                for entry in dir.flatten() {
-                    let file_path = entry.path();
-
-                    all_success &=
-                        matches!(read_source(file_path, paths, ignore_if), ReadResult::Ok);
-                }
-
-                if all_success {
-                    ReadResult::Ok
-                } else {
+            fs::read_dir(&file_path).map_or_else(
+                |_| {
+                    eprintln!("Failed to read directory \"{}\"", file_path.display());
                     ReadResult::Err
-                }
-            } else {
-                eprintln!("Failed to read directory \"{}\"", file_path.display());
-                ReadResult::Err
-            }
+                },
+                |dir| {
+                    for entry in dir.flatten() {
+                        let file_path = entry.path();
+
+                        all_success &=
+                            matches!(read_source(file_path, paths, ignore_if), ReadResult::Ok);
+                    }
+
+                    if all_success {
+                        ReadResult::Ok
+                    } else {
+                        ReadResult::Err
+                    }
+                },
+            )
         } else if file_path.is_file() {
             if matches!(file_path.extension(), Some(ext) if matches!(ext.to_str(), Some(ext) if ext == EXTENSION))
             {

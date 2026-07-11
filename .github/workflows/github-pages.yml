@@ -92,10 +92,10 @@ jobs:
         id: list_stable_data_paths
         if: steps.data_cache.outputs.cache-hit == 'true'
         run: |
-          cd endless-sky/
-          rustc -o "../list_stable_data_paths" "../list_stable_data_paths.rs"
-          ../list_stable_data_paths
-          cd ..
+          cargo run \
+            --target host-tuple \
+            --release \
+            --bin list_stable_data_paths
 
       - name: Remove `.gitignore` so the wasm is deployed
         id: bandaid

@@ -30,7 +30,17 @@ If you have cargo and rustup with a Rust version >= [MSRV](#minimum-supported-ru
 6. `wasm-bindgen --target web "target/wasm32-unknown-unknown/release/endless_sky_generator_web.wasm" --no-typescript --out-dir "./www"`
 
 ### Native
-1. `cargo build --target host-tuple --release --bins`
+```sh
+# If you're using the CLI, you don't need `page_generator`.
+# Exclude that, and include any binaries you're interested in.
+cargo build \
+  --target host-tuple \
+  --release \
+  --bin full_map \
+  --bin system_shuffler \
+  --bin chaos \
+  --bin random_galaxy
+```
 
 ### Minimum Supported Rust Version
 I like to stay on the latest stable version, so expect as such if you plan to build and there are recent commits.
@@ -46,12 +56,11 @@ This can be done with the following commands:
 3. `git sparse-checkout set --no-cone /data`
 4. `git checkout`
 5. `cp -r data/ ../www/es_stable_data/`
-6. `rustc -o "list_stable_data_paths" "list_stable_data_paths.rs"`
-7. `../list_stable_data_paths`
+6. `cargo run --target host-tuple --release --bin list_stable_data_paths`
 
 Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
 
-Steps 1 through 7 can be achieved by running `./get_stable_es_data.sh`.
+Steps 1 through 6 can be achieved by running `./get_stable_es_data.sh`.
 
 ## Notes
 I'll probably add a few more generators.  The initial goal was just System Shuffler.

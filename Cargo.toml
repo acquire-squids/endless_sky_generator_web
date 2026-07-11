@@ -39,3 +39,6 @@ name = "random_galaxy"
 
 [[bin]]
 name = "page_generator"
+
+[[bin]]
+name = "list_stable_data_paths"
