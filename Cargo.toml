@@ -33,3 +33,6 @@ name = "system_shuffler"
 
 [[bin]]
 name = "chaos"
+
+[[bin]]
+name = "random_galaxy"

@@ -38,6 +38,20 @@ pub fn generate_chaos(
         .map_err(|error| error.to_string())
 }
 
+#[wasm_bindgen]
+#[allow(clippy::missing_errors_doc)]
+pub fn generate_random_galaxy(
+    paths: Vec<String>,
+    sources: Vec<String>,
+    settings: crate::generators::random_galaxy::config::RandomGalaxyConfig,
+) -> Result<Vec<u8>, String> {
+    read_upload(paths, sources)
+        .and_then(|data_folder| {
+            crate::generators::random_galaxy::process_data(&data_folder, settings)
+        })
+        .map_err(|error| error.to_string())
+}
+
 fn read_upload(paths: Vec<String>, sources: Vec<String>) -> Result<DataFolder, Box<dyn Error>> {
     match endless_sky_rw::read_upload(paths, sources) {
         Some((data_folder, errors)) => {

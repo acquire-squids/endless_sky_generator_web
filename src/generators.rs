@@ -1,5 +1,6 @@
 pub mod chaos;
 pub mod full_map;
+pub mod random_galaxy;
 pub mod system_shuffler;
 
 use crate::zippy::Zip;
