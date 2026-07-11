@@ -168,6 +168,8 @@ impl XoShiRo256SS {
         value
     }
 
+    /// Generates a random number from minimum (inclusive) to maximum (exclusive)
+    /// It's like picking a random iteration in `minimum..maximum`
     pub fn rand_range(&mut self, minimum: u64, maximum: u64) -> u64 {
         maximum
             .max(minimum)
