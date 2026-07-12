@@ -15,12 +15,7 @@ use std::{collections::HashMap, error::Error, path::PathBuf};
 
 const PLUGIN_NAME: &str = "Chaos";
 
-const PLUGIN_DESCRIPTION: &str = "\
-    Shuffles every outfit name and image.\n\
-    Shuffles every ship name and image.\
-";
-
-const PLUGIN_VERSION: &str = "0.1.0";
+const PLUGIN_VERSION: &str = "0.2.0";
 
 #[allow(clippy::missing_errors_doc)]
 pub fn process_data(
@@ -29,7 +24,7 @@ pub fn process_data(
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = data_folder.data();
 
-    let mut rng = XoShiRo256SS::new(settings.seed);
+    let mut rng = XoShiRo256SS::new(*settings.seed());
     let mut output = vec![];
 
     let mut generator = Chaos {
@@ -37,13 +32,33 @@ pub fn process_data(
         output_data: Data::default(),
     };
 
-    generator.description()?;
+    generator.description(settings)?;
 
     generator.archive.write_dir("data/")?;
 
-    generator.outfits(data, &mut rng)?;
+    if *settings.outfits() {
+        let mut outfit_rng = XoShiRo256SS::new(rng.step());
 
-    generator.ships(data, &mut rng)?;
+        generator.outfits(data, &mut outfit_rng)?;
+    }
+
+    if *settings.ships() {
+        let mut ship_rng = XoShiRo256SS::new(rng.step());
+
+        generator.ships(data, &mut ship_rng)?;
+    }
+
+    if *settings.systems() {
+        let mut system_name_rng = XoShiRo256SS::new(rng.step());
+
+        generator.systems(data, &mut system_name_rng)?;
+    }
+
+    if *settings.planets() {
+        let mut planet_name_rng = XoShiRo256SS::new(rng.step());
+
+        generator.planets(data, &mut planet_name_rng)?;
+    }
 
     generator.archive.finish()?;
 
@@ -69,6 +84,14 @@ struct ShipData<'a> {
     plural: Option<NodeIndex>,
     sprite: Option<NodeIndex>,
     thumbnail: Option<NodeIndex>,
+}
+
+struct SystemData<'a> {
+    name: &'a str,
+}
+
+struct PlanetData<'a> {
+    name: &'a str,
 }
 
 impl Chaos<'_> {
@@ -133,7 +156,7 @@ impl Chaos<'_> {
         .last()
     }
 
-    fn description(&mut self) -> Result<(), Box<dyn Error>> {
+    fn description(&mut self, settings: &config::ChaosConfig) -> Result<(), Box<dyn Error>> {
         let output_root_node_count = self.output_data.root_nodes().len();
         let plugin_txt_source = self.output_data.insert_source(String::new());
 
@@ -145,10 +168,40 @@ impl Chaos<'_> {
         self.output_data
             .push_root_node(plugin_txt_source, plugin_name);
 
-        for about in PLUGIN_DESCRIPTION.lines().map(str::trim) {
+        if *settings.outfits() {
             let plugin_about = tree_from_tokens!(
                 &mut self.output_data; plugin_txt_source =>
-                : "about", about ;
+                : "about", "Shuffles every outfit name and image." ;
+            );
+
+            self.output_data
+                .push_root_node(plugin_txt_source, plugin_about);
+        }
+
+        if *settings.ships() {
+            let plugin_about = tree_from_tokens!(
+                &mut self.output_data; plugin_txt_source =>
+                : "about", "Shuffles every ship name and image." ;
+            );
+
+            self.output_data
+                .push_root_node(plugin_txt_source, plugin_about);
+        }
+
+        if *settings.systems() {
+            let plugin_about = tree_from_tokens!(
+                &mut self.output_data; plugin_txt_source =>
+                : "about", "Shuffles every system name." ;
+            );
+
+            self.output_data
+                .push_root_node(plugin_txt_source, plugin_about);
+        }
+
+        if *settings.planets() {
+            let plugin_about = tree_from_tokens!(
+                &mut self.output_data; plugin_txt_source =>
+                : "about", "Shuffles every planet name." ;
             );
 
             self.output_data
@@ -287,12 +340,105 @@ impl Chaos<'_> {
 
             if let Some(thumbnail) = swapped_data.thumbnail {
                 self.output_data.push_child(ship, thumbnail);
+            } else if let Some(sprite) = swapped_data.sprite
+                && let Some(tokens) = self.output_data.get_tokens(sprite)
+                && let Some(token) = tokens.get(1)
+                && let Some(sprite) = self.output_data.get_lexeme(ship_output_source, *token)
+            {
+                let sprite = sprite.to_string();
+
+                let thumbnail = tree_from_tokens!(
+                    &mut self.output_data; ship_output_source =>
+                    : "thumbnail", sprite ;
+                );
+
+                self.output_data.push_child(ship, thumbnail);
             }
 
             self.output_data.push_root_node(ship_output_source, ship);
         }
 
         self.zip_root_nodes("data/ships.txt", output_root_node_count)
+    }
+
+    fn systems(&mut self, data: &Data, rng: &mut XoShiRo256SS) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+
+        let system_output_source = self.output_data.insert_source(String::new());
+
+        let system_data = Self::get_system_data(data);
+
+        let mut system_keys = system_data.keys().collect::<Vec<_>>();
+
+        system_keys.sort_unstable();
+
+        let system_swaps = system_keys
+            .iter()
+            .zip(
+                system_keys
+                    .shuffled_indices_with_rng(rng)
+                    .into_iter()
+                    .filter_map(|i| system_keys.get(i)),
+            )
+            .collect::<HashMap<_, _>>();
+
+        for original in &system_keys {
+            let swap = system_swaps.get(original).expect("System data must exist");
+            let swapped_data = system_data.get(**swap).expect("System data must exist");
+
+            let system = tree_from_tokens!(
+                &mut self.output_data; system_output_source =>
+                : "system", original ;
+                {
+                    : "display name", swapped_data.name ;
+                }
+            );
+
+            self.output_data
+                .push_root_node(system_output_source, system);
+        }
+
+        self.zip_root_nodes("data/systems.txt", output_root_node_count)
+    }
+
+    fn planets(&mut self, data: &Data, rng: &mut XoShiRo256SS) -> Result<(), Box<dyn Error>> {
+        let output_root_node_count = self.output_data.root_nodes().len();
+
+        let planet_output_source = self.output_data.insert_source(String::new());
+
+        let planet_data = Self::get_planet_data(data);
+
+        let mut planet_keys = planet_data.keys().collect::<Vec<_>>();
+
+        planet_keys.sort_unstable();
+
+        let planet_swaps = planet_keys
+            .iter()
+            .zip(
+                planet_keys
+                    .shuffled_indices_with_rng(rng)
+                    .into_iter()
+                    .filter_map(|i| planet_keys.get(i)),
+            )
+            .collect::<HashMap<_, _>>();
+
+        for original in &planet_keys {
+            let swap = planet_swaps.get(original).expect("Planet data must exist");
+            let swapped_data = planet_data.get(**swap).expect("Planet data must exist");
+
+            let planet = tree_from_tokens!(
+                &mut self.output_data; planet_output_source =>
+                : "planet", original ;
+                {
+                    : "display name", swapped_data.name ;
+                }
+            );
+
+            self.output_data
+                .push_root_node(planet_output_source, planet);
+        }
+
+        self.zip_root_nodes("data/planets.txt", output_root_node_count)
     }
 
     fn get_outfit_data<'a>(
@@ -332,30 +478,30 @@ impl Chaos<'_> {
                         );
 
                     accum.insert(
-                    outfit_name,
-                    OutfitData {
-                        name:
-                            node_path_iter!(data => (outfit_source_index, outfit); "display name")
-                                .filter_map(|(_, node_index)| {
-                                    data.get_tokens(node_index).and_then(|tokens| {
-                                        tokens.get(1).and_then(|token| {
-                                            data.get_lexeme(outfit_source_index, *token)
+                        outfit_name,
+                        OutfitData {
+                            name:
+                                node_path_iter!(data => (outfit_source_index, outfit); "display name")
+                                    .filter_map(|(_, node_index)| {
+                                        data.get_tokens(node_index).and_then(|tokens| {
+                                            tokens.get(1).and_then(|token| {
+                                                data.get_lexeme(outfit_source_index, *token)
+                                            })
                                         })
                                     })
-                                })
-                                .last()
-                                .map_or(outfit_name, |outfit_name| outfit_name),
-                        thumbnail:
-                            self.get_copy_of_child_node(data, (outfit_source_index, outfit), "thumbnail", 2, outfit_output_source).unwrap_or_else(||
-                                    tree_from_tokens!(
-                                        &mut self.output_data; outfit_output_source =>
-                                        : "thumbnail", "outfit/unknown" ;
+                                    .last()
+                                    .map_or(outfit_name, |outfit_name| outfit_name),
+                            thumbnail:
+                                self.get_copy_of_child_node(data, (outfit_source_index, outfit), "thumbnail", 2, outfit_output_source).unwrap_or_else(||
+                                        tree_from_tokens!(
+                                            &mut self.output_data; outfit_output_source =>
+                                            : "thumbnail", "outfit/unknown" ;
+                                    ),
                                 ),
-                            ),
-                        series: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "series", 2, outfit_output_source),
-                        index: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "index", 2, outfit_output_source),
-                    },
-                );
+                            series: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "series", 2, outfit_output_source),
+                            index: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "index", 2, outfit_output_source),
+                        },
+                    );
 
                     accum
                 },
@@ -413,15 +559,13 @@ impl Chaos<'_> {
                             ship_output_source,
                         ),
                         sprite: ship_sprite,
-                        thumbnail: self
-                            .get_copy_of_child_node(
-                                data,
-                                (ship_source_index, ship),
-                                "thumbnail",
-                                2,
-                                ship_output_source,
-                            )
-                            .or(ship_sprite),
+                        thumbnail: self.get_copy_of_child_node(
+                            data,
+                            (ship_source_index, ship),
+                            "thumbnail",
+                            2,
+                            ship_output_source,
+                        ),
                     },
                 );
 
@@ -513,5 +657,85 @@ impl Chaos<'_> {
                     },
                 );
             });
+    }
+
+    fn get_system_data(data: &Data) -> HashMap<&str, SystemData<'_>> {
+        node_path_iter!(data; "system")
+            .filter(|(_, node_index)| {
+                data.get_tokens(*node_index)
+                    .map_or(0, <[Token]>::len)
+                    == 2
+            })
+            .fold(
+                HashMap::new(),
+                |mut accum, (system_source_index, system)| {
+                    let system_name = data
+                        .get_tokens(system)
+                        .and_then(|tokens| tokens.get(1))
+                        .and_then(|token| data.get_lexeme(system_source_index, *token))
+                        .expect(
+                            "The iterator should use a filter to ensure all systems have a name",
+                        );
+
+                    accum.insert(
+                        system_name,
+                        SystemData {
+                            name:
+                                node_path_iter!(data => (system_source_index, system); "display name")
+                                    .filter_map(|(_, node_index)| {
+                                        data.get_tokens(node_index).and_then(|tokens| {
+                                            tokens.get(1).and_then(|token| {
+                                                data.get_lexeme(system_source_index, *token)
+                                            })
+                                        })
+                                    })
+                                    .last()
+                                    .map_or(system_name, |system_name| system_name),
+                        },
+                    );
+
+                    accum
+                },
+            )
+    }
+
+    fn get_planet_data(data: &Data) -> HashMap<&str, PlanetData<'_>> {
+        node_path_iter!(data; "planet")
+            .filter(|(_, node_index)| {
+                data.get_tokens(*node_index)
+                    .map_or(0, <[Token]>::len)
+                    == 2
+            })
+            .fold(
+                HashMap::new(),
+                |mut accum, (planet_source_index, planet)| {
+                    let planet_name = data
+                        .get_tokens(planet)
+                        .and_then(|tokens| tokens.get(1))
+                        .and_then(|token| data.get_lexeme(planet_source_index, *token))
+                        .expect(
+                            "The iterator should use a filter to ensure all planets have a name",
+                        );
+
+                    accum.insert(
+                        planet_name,
+                        PlanetData {
+                            name:
+                                node_path_iter!(data => (planet_source_index, planet); "display name")
+                                    .filter_map(|(_, node_index)| {
+                                        data.get_tokens(node_index).and_then(|tokens| {
+                                            tokens.get(1).and_then(|token| {
+                                                data.get_lexeme(planet_source_index, *token)
+                                            })
+                                        })
+                                    })
+                                    .last()
+                                    .map_or(planet_name, |planet_name| planet_name),
+                        },
+                    );
+
+                    accum
+                },
+            )
     }
 }

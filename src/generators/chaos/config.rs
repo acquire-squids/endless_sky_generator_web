@@ -2,7 +2,11 @@ crate::macros::wasm_newtype! {
     in main =>
     #[derive(Debug)]
     pub ChaosConfig;
-    pub seed: u64,
+    seed: u64,
+    outfits: bool,
+    ships: bool,
+    systems: bool,
+    planets: bool,
 }
 
 pub mod from_file {
@@ -17,6 +21,10 @@ pub mod from_file {
         config::parse_config!(
             source => ChaosConfig;
             seed => { int of u64 => seed }
+            outfits => { bool => *outfits }
+            ships => { bool => *ships }
+            systems => { bool => *systems }
+            planets => { bool => *planets }
         )
     }
 }
@@ -46,7 +54,8 @@ pub mod page {
                 )
                 .with_element(
                     HtmlElement::new("p")
-                        .with_text("This plugin shuffles the sprites, thumbnails, and names of every ship and outfit.<br/>")
+                        .with_text("This plugin can shuffle the sprites, thumbnails, and names of every ship and outfit.<br/>")
+                        .with_text("It can also shuffle the names of every system and planet.<br/>")
                         .with_text("Everything will play the same, mostly, but the hitboxes for ships will be different and you won't know what anything is at a glance")
                 )
                 .with_element(
@@ -77,5 +86,64 @@ pub mod page {
                     input
                 }
             }))
+            .with_element(html::page::labeled(
+                "chaos-outfits",
+                "",
+                "shuffle outfits:",
+                {
+                    let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                    if let Some(settings) = settings
+                        && *settings.outfits()
+                    {
+                        input.checked()
+                    } else {
+                        input
+                    }
+                },
+            ))
+            .with_element(html::page::labeled("chaos-ships", "", "shuffle ships:", {
+                let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                if let Some(settings) = settings
+                    && *settings.ships()
+                {
+                    input.checked()
+                } else {
+                    input
+                }
+            }))
+            .with_element(html::page::labeled(
+                "chaos-systems",
+                "",
+                "shuffle systems:",
+                {
+                    let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                    if let Some(settings) = settings
+                        && *settings.systems()
+                    {
+                        input.checked()
+                    } else {
+                        input
+                    }
+                },
+            ))
+            .with_element(html::page::labeled(
+                "chaos-planets",
+                "",
+                "shuffle planets:",
+                {
+                    let input = HtmlElement::new("input").with_attribute("type", "checkbox");
+
+                    if let Some(settings) = settings
+                        && *settings.planets()
+                    {
+                        input.checked()
+                    } else {
+                        input
+                    }
+                },
+            ))
     }
 }

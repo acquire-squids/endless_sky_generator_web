@@ -1,1 +1,5 @@
-seed = 0
+seed    = 0
+outfits = true
+ships   = true
+systems = true
+planets = true

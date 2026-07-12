@@ -20,8 +20,30 @@ export const preparation = () => {
 
   const seed = Array.from(chaos_form.getElementsByClassName("chaos-seed"))[0];
 
+  const outfits = Array.from(chaos_form.getElementsByClassName("chaos-outfits"))[0];
+
+  const ships = Array.from(chaos_form.getElementsByClassName("chaos-ships"))[0];
+
+  const systems = Array.from(chaos_form.getElementsByClassName("chaos-systems"))[0];
+
+  const planets = Array.from(chaos_form.getElementsByClassName("chaos-planets"))[0];
+
   chaos_form.addEventListener("submit", async (event) => {
     event.preventDefault();
+
+    if (!outfits.checked && !ships.checked && !systems.checked && !planets.checked) {
+      const invalid = "You should enable at least one of these, otherwise the generator serves no purpose";
+
+      outfits.setCustomValidity(invalid);
+      ships.setCustomValidity(invalid);
+      systems.setCustomValidity(invalid);
+      planets.setCustomValidity(invalid);
+    } else {
+      outfits.setCustomValidity("");
+      ships.setCustomValidity("");
+      systems.setCustomValidity("");
+      planets.setCustomValidity("");
+    }
 
     if (!chaos_form.checkValidity()) {
       chaos_form.reportValidity();
@@ -39,6 +61,10 @@ export const preparation = () => {
           paths_and_sources.sources,
           new ChaosConfig(
             seed.value,
+            outfits.checked,
+            ships.checked,
+            systems.checked,
+            planets.checked,
           )
         )
       );
