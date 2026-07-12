@@ -208,7 +208,7 @@ pub mod from_file {
     use std::{fs, path::PathBuf};
 
     #[must_use]
-    pub fn parse(source: &str) -> Option<RandomGalaxyConfig> {
+    pub fn parse(source: &str, ignore_sprite: bool) -> Option<RandomGalaxyConfig> {
         let system_names = self::system_name_sources(source)?;
         let stars = self::stars(source)?;
         let planets = self::planets(source)?;
@@ -226,7 +226,13 @@ pub mod from_file {
             system_name_sources => { list where !system_name_sources.is_empty() => {
                 system_names
             }}
-            sprite_name => { string => Sprites::new(self::galaxy_sprite(source)?, stars, planets) }
+            sprite_name => { string => {
+                if ignore_sprite {
+                    Sprites::new(GalaxySprite::new("No file selected.".to_string(), vec![]), stars, planets)
+                } else {
+                    Sprites::new(self::galaxy_sprite(source)?, stars, planets)
+                }
+            }}
         )
     }
 
@@ -922,7 +928,7 @@ pub mod page {
     }
 
     fn random_galaxy_fieldset() -> HtmlElement {
-        let settings = config::from_file::parse(DEFAULT_CONFIG_FILE);
+        let settings = config::from_file::parse(DEFAULT_CONFIG_FILE, true);
         let settings = settings.as_ref();
 
         HtmlElement::new("fieldset")

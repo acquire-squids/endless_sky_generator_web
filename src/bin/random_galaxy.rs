@@ -29,7 +29,7 @@ cfg_select! {
                         Ok(source) => {
                             let source = source.as_str();
 
-                            let Some(settings) = random_galaxy::config::from_file::parse(source) else {
+                            let Some(settings) = random_galaxy::config::from_file::parse(source, false) else {
                                 return ExitCode::FAILURE;
                             };
 
