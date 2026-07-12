@@ -655,16 +655,8 @@ pub mod page {
                     .with_text("<b>The generators will include the base game's data for this version by default:</b>")
             )
             .with_div(
-                HtmlElement::new("object")
-                    .with_attributes(vec![
-                        ("type", "text/plain"),
-                        ("data", "stable_version.txt"),
-                    ])
-                    .with_attributes(vec![
-                        ("width", 96u32),
-                        ("height", 24u32),
-                    ])
-                    .with_text("!!UNKNOWN!!")
+                HtmlElement::new("h3")
+                    .with_text(crate::GAME_VERSION)
             )
             .with_div(
                 HtmlElement::new("p")
