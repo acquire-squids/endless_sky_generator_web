@@ -35,7 +35,10 @@ pub mod page {
         html::{self, HtmlElement},
     };
 
-    const DEFAULT_CONFIG_FILE: &str = include_str!("../../../config/system_shuffler/default.txt");
+    const DEFAULT_CONFIG_FILE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/config/system_shuffler/default.txt"
+    ));
 
     #[must_use]
     pub fn system_shuffler() -> HtmlElement {

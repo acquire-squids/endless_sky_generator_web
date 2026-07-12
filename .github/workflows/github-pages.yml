@@ -63,7 +63,10 @@ jobs:
       - name: Make page
         id: mage_page
         run: |
-          cargo run --target host-tuple --release --bin page_generator
+          cargo run \
+            --target host-tuple \
+            --release \
+            --bin page_generator
           mv output/index.html www/index.html
       
       - name: Run wasm-bindgen
