@@ -7,7 +7,7 @@ use crate::{
 };
 
 use endless_sky_rw::{
-    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Spanned, Token, node_path_iter,
     tree_from_tokens,
 };
 
@@ -120,12 +120,14 @@ impl Chaos<'_> {
             matches!(
                 tokens
                     .first()
-                    .and_then(|token| data.get_lexeme(source_index, *token)),
+                    .and_then(|token| data.get_lexeme(source_index, token)),
                 Some(lexeme) if lexeme == kind
             )
         })
         .filter(move |node_index| {
-            data.get_tokens(*node_index).map_or(0, <[Token]>::len) >= minimum_length
+            data.get_tokens(*node_index)
+                .map_or(0, <[Spanned<Token>]>::len)
+                >= minimum_length
         })
         .filter_map(move |node_index| {
             generators::copy_node(
@@ -343,7 +345,7 @@ impl Chaos<'_> {
             } else if let Some(sprite) = swapped_data.sprite
                 && let Some(tokens) = self.output_data.get_tokens(sprite)
                 && let Some(token) = tokens.get(1)
-                && let Some(sprite) = self.output_data.get_lexeme(ship_output_source, *token)
+                && let Some(sprite) = self.output_data.get_lexeme(ship_output_source, token)
             {
                 let sprite = sprite.to_string();
 
@@ -449,7 +451,7 @@ impl Chaos<'_> {
         node_path_iter!(data; "outfit")
             .filter(|(source_index, node_index)| {
                 data.get_tokens(*node_index)
-                    .map_or(0, <[Token]>::len)
+                    .map_or(0, <[Spanned<Token>]>::len)
                     == 2
                 && data.get_children(*node_index)
                     .map_or(
@@ -461,7 +463,7 @@ impl Chaos<'_> {
                         !matches!(
                             data.get_tokens(*child)
                                 .and_then(|tokens| tokens.first())
-                                .and_then(|token| data.get_lexeme(*source_index, *token)),
+                                .and_then(|token| data.get_lexeme(*source_index, token)),
                             Some("weapon")
                         )
                     })
@@ -472,7 +474,7 @@ impl Chaos<'_> {
                     let outfit_name = data
                         .get_tokens(outfit)
                         .and_then(|tokens| tokens.get(1))
-                        .and_then(|token| data.get_lexeme(outfit_source_index, *token))
+                        .and_then(|token| data.get_lexeme(outfit_source_index, token))
                         .expect(
                             "The iterator should use a filter to ensure all outfits have a name",
                         );
@@ -485,7 +487,7 @@ impl Chaos<'_> {
                                     .filter_map(|(_, node_index)| {
                                         data.get_tokens(node_index).and_then(|tokens| {
                                             tokens.get(1).and_then(|token| {
-                                                data.get_lexeme(outfit_source_index, *token)
+                                                data.get_lexeme(outfit_source_index, token)
                                             })
                                         })
                                     })
@@ -514,12 +516,16 @@ impl Chaos<'_> {
         ship_output_source: SourceIndex,
     ) -> HashMap<&'a str, ShipData<'a>> {
         node_path_iter!(data; "ship")
-            .filter(|(_, node_index)| data.get_tokens(*node_index).map_or(0, <[Token]>::len) == 2)
+            .filter(|(_, node_index)| {
+                data.get_tokens(*node_index)
+                    .map_or(0, <[Spanned<Token>]>::len)
+                    == 2
+            })
             .fold(HashMap::new(), |mut accum, (ship_source_index, ship)| {
                 let ship_name = data
                     .get_tokens(ship)
                     .and_then(|tokens| tokens.get(1))
-                    .and_then(|token| data.get_lexeme(ship_source_index, *token))
+                    .and_then(|token| data.get_lexeme(ship_source_index, token))
                     .expect("The iterator should use a filter to ensure all ships have a name");
 
                 let ship_sprite = self.get_copy_of_child_node(
@@ -536,9 +542,9 @@ impl Chaos<'_> {
                         name: node_path_iter!(data => (ship_source_index, ship); "display name")
                             .filter_map(|(_, node_index)| {
                                 data.get_tokens(node_index).and_then(|tokens| {
-                                    tokens.get(1).and_then(|token| {
-                                        data.get_lexeme(ship_source_index, *token)
-                                    })
+                                    tokens
+                                        .get(1)
+                                        .and_then(|token| data.get_lexeme(ship_source_index, token))
                                 })
                             })
                             .last()
@@ -581,7 +587,9 @@ impl Chaos<'_> {
     ) {
         node_path_iter!(data; "ship")
             .filter(|(source_index, node_index)| {
-                data.get_tokens(*node_index).map_or(0, <[Token]>::len) == 3
+                data.get_tokens(*node_index)
+                    .map_or(0, <[Spanned<Token>]>::len)
+                    == 3
                     && node_path_iter!(
                         data => (*source_index, *node_index);
                         "display name" | "plural" | "noun" | "sprite" | "thumbnail"
@@ -593,13 +601,13 @@ impl Chaos<'_> {
                 let ship_variant = data
                     .get_tokens(ship)
                     .and_then(|tokens| tokens.get(2))
-                    .and_then(|token| data.get_lexeme(ship_source_index, *token))
+                    .and_then(|token| data.get_lexeme(ship_source_index, token))
                     .expect("The iterator should use a filter to ensure all ships have a name");
 
                 let ship_model = data
                     .get_tokens(ship)
                     .and_then(|tokens| tokens.get(1))
-                    .and_then(|token| data.get_lexeme(ship_source_index, *token))
+                    .and_then(|token| data.get_lexeme(ship_source_index, token))
                     .expect("The iterator should use a filter to ensure all ships have a name");
 
                 let ship_sprite = self
@@ -618,9 +626,9 @@ impl Chaos<'_> {
                         name: node_path_iter!(data => (ship_source_index, ship); "display name")
                             .filter_map(|(_, node_index)| {
                                 data.get_tokens(node_index).and_then(|tokens| {
-                                    tokens.get(1).and_then(|token| {
-                                        data.get_lexeme(ship_source_index, *token)
-                                    })
+                                    tokens
+                                        .get(1)
+                                        .and_then(|token| data.get_lexeme(ship_source_index, token))
                                 })
                             })
                             .last()
@@ -663,7 +671,7 @@ impl Chaos<'_> {
         node_path_iter!(data; "system")
             .filter(|(_, node_index)| {
                 data.get_tokens(*node_index)
-                    .map_or(0, <[Token]>::len)
+                    .map_or(0, <[Spanned<Token>]>::len)
                     == 2
             })
             .fold(
@@ -672,7 +680,7 @@ impl Chaos<'_> {
                     let system_name = data
                         .get_tokens(system)
                         .and_then(|tokens| tokens.get(1))
-                        .and_then(|token| data.get_lexeme(system_source_index, *token))
+                        .and_then(|token| data.get_lexeme(system_source_index, token))
                         .expect(
                             "The iterator should use a filter to ensure all systems have a name",
                         );
@@ -685,7 +693,7 @@ impl Chaos<'_> {
                                     .filter_map(|(_, node_index)| {
                                         data.get_tokens(node_index).and_then(|tokens| {
                                             tokens.get(1).and_then(|token| {
-                                                data.get_lexeme(system_source_index, *token)
+                                                data.get_lexeme(system_source_index, token)
                                             })
                                         })
                                     })
@@ -703,7 +711,7 @@ impl Chaos<'_> {
         node_path_iter!(data; "planet")
             .filter(|(_, node_index)| {
                 data.get_tokens(*node_index)
-                    .map_or(0, <[Token]>::len)
+                    .map_or(0, <[Spanned<Token>]>::len)
                     == 2
             })
             .fold(
@@ -712,7 +720,7 @@ impl Chaos<'_> {
                     let planet_name = data
                         .get_tokens(planet)
                         .and_then(|tokens| tokens.get(1))
-                        .and_then(|token| data.get_lexeme(planet_source_index, *token))
+                        .and_then(|token| data.get_lexeme(planet_source_index, token))
                         .expect(
                             "The iterator should use a filter to ensure all planets have a name",
                         );
@@ -725,7 +733,7 @@ impl Chaos<'_> {
                                     .filter_map(|(_, node_index)| {
                                         data.get_tokens(node_index).and_then(|tokens| {
                                             tokens.get(1).and_then(|token| {
-                                                data.get_lexeme(planet_source_index, *token)
+                                                data.get_lexeme(planet_source_index, token)
                                             })
                                         })
                                     })

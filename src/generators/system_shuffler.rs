@@ -7,7 +7,7 @@ use crate::{
 };
 
 use endless_sky_rw::{
-    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Spanned, Token, node_path_iter,
     tree_from_tokens,
 };
 
@@ -957,7 +957,7 @@ impl SystemShuffler<'_> {
                         None
                     }
                 })
-                .and_then(|token| self.output_data.get_lexeme(source_index, *token)),
+                .and_then(|token| self.output_data.get_lexeme(source_index, token)),
             Some("link" | "unlink")
         )
     }
@@ -1210,25 +1210,25 @@ impl SystemShuffler<'_> {
             self.output_data
                 .get_tokens(*a)
                 .and_then(|tokens| tokens.first())
-                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .and_then(|token| self.output_data.get_lexeme(source, token))
                 .expect("Only nodes with at least one token should be modified"),
             self.output_data
                 .get_tokens(*b)
                 .and_then(|tokens| tokens.first())
-                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .and_then(|token| self.output_data.get_lexeme(source, token))
                 .expect("Only nodes with at least one token should be modified"),
         ) {
             (a_lexeme, b_lexeme) if a_lexeme == b_lexeme => self
                 .output_data
                 .get_tokens(*a)
                 .and_then(|tokens| tokens.get(1))
-                .and_then(|token| self.output_data.get_lexeme(source, *token))
+                .and_then(|token| self.output_data.get_lexeme(source, token))
                 .cmp(
                     &self
                         .output_data
                         .get_tokens(*b)
                         .and_then(|tokens| tokens.get(1))
-                        .and_then(|token| self.output_data.get_lexeme(source, *token)),
+                        .and_then(|token| self.output_data.get_lexeme(source, token)),
                 ),
             (_, "add" | "link") | ("remove" | "unlink", _) => Ordering::Less,
             ("add" | "link", _) | (_, "remove" | "unlink") => Ordering::Greater,
@@ -1315,7 +1315,7 @@ impl SystemShuffler<'_> {
                 .get_tokens(node_value.2)
                 .unwrap_or_default()
                 .iter()
-                .filter_map(|t| data.get_lexeme(node_value.1, *t))
+                .filter_map(|t| data.get_lexeme(node_value.1, t))
                 .skip_while(|l| *l != node_kind)
                 .skip(1)
             {
@@ -1331,7 +1331,10 @@ impl SystemShuffler<'_> {
 
                 self.output_data.push_token(
                     modified_link,
-                    Token::new(TokenKind::Symbol, Span::new(start, end)),
+                    Spanned::new(
+                        Token::Symbol,
+                        Span::new(shuffle_event_source.index(), start, end),
+                    ),
                 );
             }
         }
@@ -1371,11 +1374,14 @@ impl SystemShuffler<'_> {
         if let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
             self.output_data.get_mut_node(modified_object)
         {
-            let modified_token = Token::new(TokenKind::Symbol, Span::new(start, end));
+            let modified_token = Spanned::new(
+                Token::Symbol,
+                Span::new(shuffle_event_source.index(), start, end),
+            );
 
             if matches!(
                 data.get_tokens(node_value.2)
-                    .and_then(|tokens| data.get_lexeme(node_value.1, tokens[0])),
+                    .and_then(|tokens| data.get_lexeme(node_value.1, &tokens[0])),
                 Some("add" | "remove")
             ) && let Some(modifier) = tokens.first_mut()
             {
@@ -1411,7 +1417,7 @@ impl SystemShuffler<'_> {
                     .get_tokens(modified_copy)
                     .and_then(|tokens| tokens.first().and_then(|token| self
                         .output_data
-                        .get_lexeme(shuffle_event_source, *token))),
+                        .get_lexeme(shuffle_event_source, token))),
                 Some("add" | "remove")
             ) && let Some(Node::Some { tokens } | Node::Parent { tokens, .. }) =
                 self.output_data.get_mut_node(modified_copy)
@@ -1447,7 +1453,7 @@ fn find_wormholes_from_planets<'a>(data: &'a Data, wormholes: &mut HashSet<&'a s
         .for_each(|(source_index, node_index)| {
             wormholes.insert(
                 data.get_tokens(node_index)
-                    .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
+                    .and_then(|tokens| data.get_lexeme(source_index, &tokens[1]))
                     .expect("The iterator should have a filter applied to ensure only nodes with at least two tokens make it here"),
             );
         });
@@ -1463,14 +1469,14 @@ fn find_wormholes_from_system<'a>(
         let key_index = usize::from(matches!(
             tokens
                 .first()
-                .and_then(|t| data.get_lexeme(source_index, *t)),
+                .and_then(|t| data.get_lexeme(source_index, t)),
             Some("remove" | "add")
         ));
 
         matches!(
             tokens
                 .get(key_index)
-                .and_then(|t| data.get_lexeme(source_index, *t)),
+                .and_then(|t| data.get_lexeme(source_index, t)),
             Some(l) if l == "object"
         )
     })
@@ -1480,7 +1486,7 @@ fn find_wormholes_from_system<'a>(
         if let Some(object_name) = data
             .get_tokens(child)
             .and_then(|tokens| tokens.get(1))
-            .and_then(|t| data.get_lexeme(source_index, *t))
+            .and_then(|t| data.get_lexeme(source_index, t))
         {
             if let Some(name) = planets.get(object_name)
                 && *name != system_name
@@ -1505,7 +1511,7 @@ fn find_wormholes_from_system<'a>(
         if depth == 0 && is_wormhole {
             let action = match data
                 .get_tokens(child)
-                .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
+                .and_then(|tokens| data.get_lexeme(source_index, &tokens[0]))
                 .expect("The iterator should use a filter to ensure only nodes with at least one token (or two, if starting with add/remove) are allowed")
             {
                 "remove" => {
@@ -1556,7 +1562,7 @@ fn find_persistent_event_nodes<'a>(
     {
         let event_name = data
             .get_tokens(node_index)
-            .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
+            .and_then(|tokens| data.get_lexeme(source_index, &tokens[1]))
             .expect("The iterator should have a filter to ensure only nodes with at least two tokens make it here");
 
         let mut event_map = HashMap::new();
@@ -1683,12 +1689,12 @@ fn data_from_node<'a>(
     {
         let original_node_kind = data
             .get_tokens(node_index)
-            .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
+            .and_then(|tokens| data.get_lexeme(source_index, &tokens[0]))
             .expect("The iterator should use a filter to ensure only nodes with at least two tokens make it this far");
 
         let original_node_name = data
             .get_tokens(node_index)
-            .and_then(|tokens| data.get_lexeme(source_index, tokens[1]))
+            .and_then(|tokens| data.get_lexeme(source_index, &tokens[1]))
             .expect("The iterator should use a filter to ensure only nodes with at least two tokens make it this far");
 
         match original_node_kind {
@@ -1726,20 +1732,20 @@ fn data_from_node<'a>(
                 let key_index = usize::from(matches!(
                     tokens
                         .first()
-                        .and_then(|t| data.get_lexeme(source_index, *t)),
+                        .and_then(|t| data.get_lexeme(source_index, t)),
                     Some("remove" | "add")
                 ));
 
                 matches!(
                     tokens
                         .get(key_index)
-                        .and_then(|t| data.get_lexeme(source_index, *t)),
+                        .and_then(|t| data.get_lexeme(source_index, t)),
                     Some(l) if l == *node_kind
                 )
             }) {
                 let action = match data
                     .get_tokens(child)
-                    .and_then(|tokens| data.get_lexeme(source_index, tokens[0]))
+                    .and_then(|tokens| data.get_lexeme(source_index, &tokens[0]))
                 .expect("The iterator should use a filter to ensure only nodes with at least one tokens (or two, if starting with add/remove) are allowed")
                 {
                     "remove" => {

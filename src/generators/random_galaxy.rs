@@ -15,7 +15,7 @@ use crate::{
 };
 
 use endless_sky_rw::{
-    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, tree_from_tokens,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, tree_from_tokens,
 };
 
 use std::{error::Error, path::PathBuf};

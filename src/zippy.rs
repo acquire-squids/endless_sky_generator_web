@@ -30,7 +30,7 @@ impl<'a> Zip<'a> {
         let (mut entry, config) = self
             .writer
             .new_file(path.as_str())
-            .compression_method(CompressionMethod::Deflate)
+            .compression_method(CompressionMethod::DEFLATE)
             .start()?;
 
         let encoder = DeflateEncoder::new(&mut entry, Compression::default());

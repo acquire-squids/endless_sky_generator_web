@@ -3,8 +3,7 @@ pub mod config;
 use crate::{generators, zippy::Zip};
 
 use endless_sky_rw::{
-    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, TokenKind, node_path_iter,
-    tree_from_tokens,
+    Data, DataFolder, Node, NodeIndex, SourceIndex, Span, Token, node_path_iter, tree_from_tokens,
 };
 
 use std::{error::Error, path::PathBuf};
@@ -26,7 +25,7 @@ fn find_named_objects<'a>(
     for (_, object) in node_path_iter!(data => (source_index, node_index); "object") {
         if let Some(tokens) = data.get_tokens(object)
             && tokens.len() >= 2
-            && let Some(name) = data.get_lexeme(source_index, tokens[1])
+            && let Some(name) = data.get_lexeme(source_index, &tokens[1])
         {
             names.push(name);
         }
@@ -168,7 +167,7 @@ impl FullMap<'_> {
                 data
                     .get_tokens(system)
                     .and_then(|tokens| tokens.get(1))
-                    .and_then(|token| data.get_lexeme(source_index, *token))
+                    .and_then(|token| data.get_lexeme(source_index, token))
                     .expect("The iterator should have a filter applied such that only nodes with two or more tokens are allowed")
             );
 

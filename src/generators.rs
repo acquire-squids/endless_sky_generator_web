@@ -5,7 +5,7 @@ pub mod system_shuffler;
 
 use crate::zippy::Zip;
 
-use endless_sky_rw::{self, Data, Node, NodeIndex, SourceIndex, Span, Token, TokenKind};
+use endless_sky_rw::{self, Data, Node, NodeIndex, SourceIndex, Span, Spanned, Token};
 
 use std::{error::Error, io, path::PathBuf};
 
@@ -83,12 +83,15 @@ fn copy_node_allow_or_deny(
     let output_node = output_data.insert_node(Node::Some { tokens: vec![] });
 
     for token in tokens {
-        if let Some(lexeme) = data.get_lexeme(source_index, *token)
+        if let Some(lexeme) = data.get_lexeme(source_index, token)
             && let Some((span_start, span_end)) = output_data.push_source(output_source, lexeme)
         {
             output_data.push_token(
                 output_node,
-                Token::new(TokenKind::Symbol, Span::new(span_start, span_end)),
+                Spanned::new(
+                    Token::Symbol,
+                    Span::new(output_source.index(), span_start, span_end),
+                ),
             );
         }
     }
@@ -98,7 +101,7 @@ fn copy_node_allow_or_deny(
             if let Some(lexeme) = data
                 .get_tokens(*child)
                 .and_then(|tokens| tokens.first())
-                .and_then(|t| data.get_lexeme(source_index, *t))
+                .and_then(|t| data.get_lexeme(source_index, t))
                 && ((allow && child_list.contains(&lexeme))
                     || (!allow && !child_list.contains(&lexeme)))
                 && let Some(output_child) = copy_node_allow_or_deny(

@@ -17,12 +17,12 @@ crate-type = ["cdylib", "lib"]
 lto = true
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-wasm-bindgen = { version = "=0.2.117" }
+wasm-bindgen = { version = "=0.2.126" }
 
 [dependencies]
 endless_sky_rw = { path = "./endless_sky_rw" }
 
-rawzip = "=0.4.4"
+rawzip = "=0.5.1"
 flate2 = "=1.1.9"
 
 [[bin]]
