@@ -41,7 +41,10 @@ dependencies = [
 
 [[package]]
 name = "endless_sky_rw"
-version = "0.3.0"
+version = "0.3.1"
+dependencies = [
+ "reporting",
+]
 
 [[package]]
 name = "flate2"
@@ -92,6 +95,10 @@ name = "rawzip"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75a2b2577f5fd7e26caabd4aa7bba1ef18653ff32204eea251c1136db1a549f3"
+
+[[package]]
+name = "reporting"
+version = "0.1.0"
 
 [[package]]
 name = "rustversion"

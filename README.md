@@ -45,7 +45,7 @@ cargo build \
 ### Minimum Supported Rust Version
 I like to stay on the latest stable version, so expect as such if you plan to build and there are recent commits.
 
-**Current MSRV: 1.95.0**
+**Current MSRV: 1.97.1**
 
 ### Default Data
 You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
