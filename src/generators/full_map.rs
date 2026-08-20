@@ -127,7 +127,7 @@ impl FullMap<'_> {
 
         let mission = tree_from_tokens!(
             &mut self.output_data; mission_txt_source =>
-            : "mission", format!("Full Map: I know where everything is now") ;
+            : "mission", "Full Map: I know where everything is now" ;
             {
                 : "name", "Map Reveal" ;
                 : "description", "You can now see every system and planet on the map. Shrouded and hidden systems may disappear again" ;
@@ -152,7 +152,7 @@ impl FullMap<'_> {
 
         let event = tree_from_tokens!(
             &mut self.output_data; event_txt_source =>
-            : "event", format!("Full Map: I know where everything is now") ;
+            : "event", "Full Map: I know where everything is now" ;
         );
 
         let mut system_names = vec![];
