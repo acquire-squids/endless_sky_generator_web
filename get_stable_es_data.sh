@@ -17,6 +17,8 @@ git checkout
 
 cp -r data/ ../www/es_stable_data/
 
+cd ..
+
 cargo run \
   --target host-tuple \
   --release \
