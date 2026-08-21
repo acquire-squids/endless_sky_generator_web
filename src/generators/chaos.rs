@@ -15,7 +15,7 @@ use std::{collections::HashMap, error::Error, path::PathBuf};
 
 const PLUGIN_NAME: &str = "Chaos";
 
-const PLUGIN_VERSION: &str = "0.2.0";
+const PLUGIN_VERSION: &str = "0.2.1";
 
 #[allow(clippy::missing_errors_doc)]
 pub fn process_data(
@@ -72,6 +72,7 @@ struct Chaos<'a> {
 
 struct OutfitData<'a> {
     name: &'a str,
+    plural: NodeIndex,
     thumbnail: NodeIndex,
     series: Option<NodeIndex>,
     index: Option<NodeIndex>,
@@ -81,7 +82,7 @@ struct ShipData<'a> {
     name: &'a str,
     model: &'a str,
     noun: Option<NodeIndex>,
-    plural: Option<NodeIndex>,
+    plural: NodeIndex,
     sprite: Option<NodeIndex>,
     thumbnail: Option<NodeIndex>,
 }
@@ -265,6 +266,8 @@ impl Chaos<'_> {
                 }
             );
 
+            self.output_data.push_child(outfit, swapped_data.plural);
+
             self.output_data.push_child(outfit, swapped_data.thumbnail);
 
             if let Some(series) = swapped_data.series {
@@ -332,9 +335,7 @@ impl Chaos<'_> {
                 self.output_data.push_child(ship, noun);
             }
 
-            if let Some(plural) = swapped_data.plural {
-                self.output_data.push_child(ship, plural);
-            }
+            self.output_data.push_child(ship, swapped_data.plural);
 
             if let Some(sprite) = swapped_data.sprite {
                 self.output_data.push_child(ship, sprite);
@@ -453,20 +454,18 @@ impl Chaos<'_> {
                 data.get_tokens(*node_index)
                     .map_or(0, <[Spanned<Token>]>::len)
                     == 2
-                && data.get_children(*node_index)
-                    .map_or(
-                        [].as_slice(),
-                        |children| children
-                    )
-                    .iter()
-                    .any(|child| {
-                        !matches!(
-                            data.get_tokens(*child)
-                                .and_then(|tokens| tokens.first())
-                                .and_then(|token| data.get_lexeme(*source_index, token)),
-                            Some("weapon")
-                        )
-                    })
+                    && data
+                        .get_children(*node_index)
+                        .map_or([].as_slice(), |children| children)
+                        .iter()
+                        .any(|child| {
+                            !matches!(
+                                data.get_tokens(*child)
+                                    .and_then(|tokens| tokens.first())
+                                    .and_then(|token| data.get_lexeme(*source_index, token)),
+                                Some("weapon")
+                            )
+                        })
             })
             .fold(
                 HashMap::new(),
@@ -479,29 +478,64 @@ impl Chaos<'_> {
                             "The iterator should use a filter to ensure all outfits have a name",
                         );
 
+                    let name =
+                        node_path_iter!(data => (outfit_source_index, outfit); "display name")
+                            .filter_map(|(_, node_index)| {
+                                data.get_tokens(node_index).and_then(|tokens| {
+                                    tokens.get(1).and_then(|token| {
+                                        data.get_lexeme(outfit_source_index, token)
+                                    })
+                                })
+                            })
+                            .last()
+                            .map_or(outfit_name, |outfit_name| outfit_name);
+
                     accum.insert(
                         outfit_name,
                         OutfitData {
-                            name:
-                                node_path_iter!(data => (outfit_source_index, outfit); "display name")
-                                    .filter_map(|(_, node_index)| {
-                                        data.get_tokens(node_index).and_then(|tokens| {
-                                            tokens.get(1).and_then(|token| {
-                                                data.get_lexeme(outfit_source_index, token)
-                                            })
-                                        })
-                                    })
-                                    .last()
-                                    .map_or(outfit_name, |outfit_name| outfit_name),
-                            thumbnail:
-                                self.get_copy_of_child_node(data, (outfit_source_index, outfit), "thumbnail", 2, outfit_output_source).unwrap_or_else(||
-                                        tree_from_tokens!(
+                            name,
+                            plural: self
+                                .get_copy_of_child_node(
+                                    data,
+                                    (outfit_source_index, outfit),
+                                    "plural",
+                                    2,
+                                    outfit_output_source,
+                                )
+                                .unwrap_or_else(|| {
+                                    tree_from_tokens!(
+                                        &mut self.output_data; outfit_output_source =>
+                                        : "plural", format!("{name}s") ;
+                                    )
+                                }),
+                            thumbnail: self
+                                .get_copy_of_child_node(
+                                    data,
+                                    (outfit_source_index, outfit),
+                                    "thumbnail",
+                                    2,
+                                    outfit_output_source,
+                                )
+                                .unwrap_or_else(|| {
+                                    tree_from_tokens!(
                                             &mut self.output_data; outfit_output_source =>
                                             : "thumbnail", "outfit/unknown" ;
-                                    ),
-                                ),
-                            series: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "series", 2, outfit_output_source),
-                            index: self.get_copy_of_child_node(data, (outfit_source_index, outfit), "index", 2, outfit_output_source),
+                                    )
+                                }),
+                            series: self.get_copy_of_child_node(
+                                data,
+                                (outfit_source_index, outfit),
+                                "series",
+                                2,
+                                outfit_output_source,
+                            ),
+                            index: self.get_copy_of_child_node(
+                                data,
+                                (outfit_source_index, outfit),
+                                "index",
+                                2,
+                                outfit_output_source,
+                            ),
                         },
                     );
 
@@ -536,27 +570,36 @@ impl Chaos<'_> {
                     ship_output_source,
                 );
 
+                let name = node_path_iter!(data => (ship_source_index, ship); "display name")
+                    .filter_map(|(_, node_index)| {
+                        data.get_tokens(node_index).and_then(|tokens| {
+                            tokens
+                                .get(1)
+                                .and_then(|token| data.get_lexeme(ship_source_index, token))
+                        })
+                    })
+                    .last()
+                    .map_or(ship_name, |ship_name| ship_name);
+
                 accum.insert(
                     ship_name,
                     ShipData {
-                        name: node_path_iter!(data => (ship_source_index, ship); "display name")
-                            .filter_map(|(_, node_index)| {
-                                data.get_tokens(node_index).and_then(|tokens| {
-                                    tokens
-                                        .get(1)
-                                        .and_then(|token| data.get_lexeme(ship_source_index, token))
-                                })
-                            })
-                            .last()
-                            .map_or(ship_name, |ship_name| ship_name),
+                        name,
                         model: ship_name,
-                        plural: self.get_copy_of_child_node(
-                            data,
-                            (ship_source_index, ship),
-                            "plural",
-                            2,
-                            ship_output_source,
-                        ),
+                        plural: self
+                            .get_copy_of_child_node(
+                                data,
+                                (ship_source_index, ship),
+                                "plural",
+                                2,
+                                ship_output_source,
+                            )
+                            .unwrap_or_else(|| {
+                                tree_from_tokens!(
+                                    &mut self.output_data; ship_output_source =>
+                                    : "plural", format!("{name}s") ;
+                                )
+                            }),
                         noun: self.get_copy_of_child_node(
                             data,
                             (ship_source_index, ship),
@@ -620,19 +663,21 @@ impl Chaos<'_> {
                     )
                     .or_else(|| ship_data.get(&ship_model).and_then(|data| data.sprite));
 
+                let name = node_path_iter!(data => (ship_source_index, ship); "display name")
+                    .filter_map(|(_, node_index)| {
+                        data.get_tokens(node_index).and_then(|tokens| {
+                            tokens
+                                .get(1)
+                                .and_then(|token| data.get_lexeme(ship_source_index, token))
+                        })
+                    })
+                    .last()
+                    .map_or(ship_model, |ship_name| ship_name);
+
                 ship_data.insert(
                     ship_variant,
                     ShipData {
-                        name: node_path_iter!(data => (ship_source_index, ship); "display name")
-                            .filter_map(|(_, node_index)| {
-                                data.get_tokens(node_index).and_then(|tokens| {
-                                    tokens
-                                        .get(1)
-                                        .and_then(|token| data.get_lexeme(ship_source_index, token))
-                                })
-                            })
-                            .last()
-                            .map_or(ship_model, |ship_name| ship_name),
+                        name,
                         model: ship_model,
                         plural: self
                             .get_copy_of_child_node(
@@ -642,7 +687,13 @@ impl Chaos<'_> {
                                 2,
                                 ship_output_source,
                             )
-                            .or_else(|| ship_data.get(&ship_model).and_then(|data| data.plural)),
+                            .or_else(|| ship_data.get(&ship_model).map(|data| data.plural))
+                            .unwrap_or_else(|| {
+                                tree_from_tokens!(
+                                    &mut self.output_data; ship_output_source =>
+                                    : "plural", format!("{name}s") ;
+                                )
+                            }),
                         noun: self
                             .get_copy_of_child_node(
                                 data,
