@@ -87,18 +87,14 @@ jobs:
         if: steps.data_cache.outputs.cache-hit != 'true'
         run: ./get_stable_es_data.sh
 
-      - name: Copy stable data from cache
-        if: steps.data_cache.outputs.cache-hit == 'true'
-        run: cp -r endless-sky/data/ www/es_stable_data/
-
-      - name: List stable data paths
-        id: list_stable_data_paths
+      - name: Combine stable data paths
+        id: combine_stable_data
         if: steps.data_cache.outputs.cache-hit == 'true'
         run: |
           cargo run \
             --target host-tuple \
             --release \
-            --bin list_stable_data_paths
+            --bin combine_stable_data
 
       - name: Remove `.gitignore` so the wasm is deployed
         id: bandaid
