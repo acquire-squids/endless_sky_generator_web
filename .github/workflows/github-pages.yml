@@ -91,6 +91,7 @@ jobs:
         id: combine_stable_data
         if: steps.data_cache.outputs.cache-hit == 'true'
         run: |
+          mkdir www/es_stable_data/
           cargo run \
             --target host-tuple \
             --release \
