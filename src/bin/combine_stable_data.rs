@@ -6,7 +6,7 @@ use std::{
 };
 
 fn main() -> ExitCode {
-    let data_path = ["www", "es_stable_data"].iter().collect::<PathBuf>();
+    let data_path = ["endless-sky", "data"].iter().collect::<PathBuf>();
 
     let deprecated_path = data_path.as_path().join("_deprecated");
     let deprecated_path = deprecated_path.as_path();
@@ -24,23 +24,47 @@ fn main() -> ExitCode {
         ReadResult::Ok => {
             paths_list.sort_unstable();
 
-            let list_as_text = paths_list
+            let mut combined_source = String::new();
+
+            for path in paths_list {
+                match fs::read_to_string(path) {
+                    Ok(source) => {
+                        combined_source.push_str(source.as_str());
+                        combined_source.push('\n');
+                    }
+                    Err(error) => {
+                        eprintln!("{error}");
+
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+
+            let output_path = ["www", "es_stable_data", "combined_es_stable_data.txt"]
                 .into_iter()
-                .fold(OsString::new(), |mut accum, path| {
-                    accum.push(
-                        path.components()
-                            .skip(1)
-                            .collect::<PathBuf>()
-                            .as_mut_os_string(),
-                    );
+                .collect::<PathBuf>();
 
-                    accum.push("\n");
+            match fs::write(&output_path, combined_source) {
+                Ok(()) => {
+                    match fs::write(output, {
+                        let mut output_path = output_path.components().skip(1).collect::<PathBuf>();
 
-                    accum
-                });
+                        let output_path = output_path.as_mut_os_string();
 
-            match fs::write(output, list_as_text.into_encoded_bytes()) {
-                Ok(()) => ExitCode::SUCCESS,
+                        let mut output = OsString::new();
+
+                        output.push(output_path);
+                        output.push("\n");
+
+                        output.into_encoded_bytes()
+                    }) {
+                        Ok(()) => ExitCode::SUCCESS,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            ExitCode::FAILURE
+                        }
+                    }
+                }
                 Err(error) => {
                     eprintln!("{error}");
                     ExitCode::FAILURE

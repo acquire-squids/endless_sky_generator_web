@@ -15,11 +15,11 @@ git sparse-checkout set --no-cone /data
 
 git checkout
 
-cp -r data/ ../www/es_stable_data/
-
 cd ..
+
+mkdir www/es_stable_data/
 
 cargo run \
   --target host-tuple \
   --release \
-  --bin list_stable_data_paths
+  --bin combine_stable_data

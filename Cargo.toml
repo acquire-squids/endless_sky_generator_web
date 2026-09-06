@@ -41,4 +41,4 @@ name = "random_galaxy"
 name = "page_generator"
 
 [[bin]]
-name = "list_stable_data_paths"
+name = "combine_stable_data"

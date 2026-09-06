@@ -48,18 +48,18 @@ I like to stay on the latest stable version, so expect as such if you plan to bu
 **Current MSRV: 1.97.1**
 
 ### Default Data
-You must also place an Endless Sky data folder at `endless-sky/data/` so there is default data.
+You must also place an Endless Sky data folder at `www/es_stable_data/`.
 
 This can be done with the following commands:
 1. `git clone --no-checkout --depth=1 --filter=tree:0 https://github.com/endless-sky/endless-sky.git`
 2. `cd endless-sky/`
 3. `git sparse-checkout set --no-cone /data`
 4. `git checkout`
-5. `cp -r data/ ../www/es_stable_data/`
-6. `cd ..`
-7. `cargo run --target host-tuple --release --bin list_stable_data_paths`
+5. `cd ..`
+6. `mkdir www/es_stable_data/`
+7. `cargo run --target host-tuple --release --bin combine_stable_data`
 
-Use `--branch v0.10.16` in the `git clone` to get a tagged release, where `v0.10.16` is your target tag.
+Use `--branch v0.11.2` in the `git clone` to get a tagged release, where `v0.11.2` is your target tag.
 
 Steps 1 through 7 can be achieved by running `./get_stable_es_data.sh`.
 
